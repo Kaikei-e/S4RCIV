@@ -38,4 +38,10 @@ type ControlStore interface {
 	// failure counter — this is not a fetch failure, the snapshot is simply not
 	// published yet.
 	MarkPending(ctx context.Context, streamID string, polledAt, retryAt time.Time) error
+	// Heartbeat records that the daemon's poll loop reached this point for
+	// source, so an external healthcheck can detect a wedged (alive-but-not-
+	// looping) daemon that a process-exit-only restart policy would miss.
+	Heartbeat(ctx context.Context, source string, at time.Time) error
+	// LastHeartbeat returns the most recent Heartbeat time for source.
+	LastHeartbeat(ctx context.Context, source string) (time.Time, error)
 }

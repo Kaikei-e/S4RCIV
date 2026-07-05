@@ -6,6 +6,7 @@ package collect
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -56,26 +57,36 @@ func New(
 }
 
 // PollOnce polls every currently-due watch for a source, serially (DISCIPLINE
-// §1). Returns how many observation events were emitted.
+// §1). Returns how many observation events were emitted. A per-stream failure
+// never stops the batch — it is recorded (backoff) and joined into the returned
+// error so the caller can log it, while emitted still reflects every stream that
+// did succeed.
 func (c *Collector) PollOnce(ctx context.Context, source string, limit int) (int, error) {
 	due, err := c.control.DueWatches(ctx, source, c.clock.Now(), limit)
 	if err != nil {
 		return 0, fmt.Errorf("due watches: %w", err)
 	}
 	emitted := 0
+	var errs []error
 	for _, w := range due {
 		ok, err := c.PollStream(ctx, w)
 		if err != nil {
+			errs = append(errs, fmt.Errorf("poll %s: %w", w.StreamID, err))
 			// Record the failure cursor (backoff) and keep going; one bad stream
-			// must not stall the rest.
-			_ = c.control.MarkPolled(ctx, w.StreamID, c.clock.Now(), c.nextDue(), false)
+			// must not stall the rest. A write failure here is itself worth
+			// surfacing: silently swallowing it would leave a persistent
+			// control-plane write failure with no trail (the stream would otherwise
+			// appear immediately due again next cycle with no clue why).
+			if merr := c.control.MarkPolled(ctx, w.StreamID, c.clock.Now(), c.nextDue(), false); merr != nil {
+				errs = append(errs, fmt.Errorf("mark failure %s: %w", w.StreamID, merr))
+			}
 			continue
 		}
 		if ok {
 			emitted++
 		}
 	}
-	return emitted, nil
+	return emitted, errors.Join(errs...)
 }
 
 // PollStream fetches one Resource and appends an event iff something changed.

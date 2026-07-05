@@ -65,6 +65,11 @@ const (
 	// 90-day window holds well under this in practice; a deliberate backfill beyond
 	// it goes through the manual discover command.
 	autoDiscoverMax = 2000
+	// heartbeatStaleAfter bounds how long a daemon may go without reaching the top
+	// of its poll loop before an external healthcheck calls it wedged. Comfortably
+	// above maxThrottleBackoff (egovhttp/kokkaihttp: 15m) so a single legitimate
+	// 429/503 backoff episode never trips a false positive.
+	heartbeatStaleAfter = 20 * time.Minute
 )
 
 // recentScope is the rolling discover window [today-discoverWindowDays, today],
@@ -111,7 +116,11 @@ type pipeline interface {
 func main() {
 	fs := flag.NewFlagSet("collector", flag.ExitOnError)
 	source := fs.String("source", "kokkai", "source to operate on (kokkai | egov-law | giin-roster | sangiin-vote | sangiin-roster)")
+	healthcheck := fs.Bool("healthcheck", false, "probe this source's daemon heartbeat and exit (for the container healthcheck)")
 	_ = fs.Parse(os.Args[1:])
+	if *healthcheck {
+		os.Exit(probeHeartbeat(*source))
+	}
 	rest := fs.Args()
 	if len(rest) < 1 {
 		usage()
@@ -134,7 +143,7 @@ func main() {
 		return
 	}
 
-	p, cfg, err := wire(ctx, pool, *source)
+	p, cfg, control, err := wire(ctx, pool, *source)
 	if err != nil {
 		log.Fatalf("wire %s: %v", *source, err)
 	}
@@ -149,7 +158,7 @@ func main() {
 
 	switch rest[0] {
 	case "run":
-		runDaemon(ctx, p)
+		runDaemon(ctx, p, *source, control)
 	case "poll-once":
 		p.poll(ctx)
 		p.project(ctx)
@@ -176,11 +185,11 @@ func commandNeedsEnabledSource(cmd string) bool {
 	return false
 }
 
-func wire(ctx context.Context, pool *pgxpool.Pool, source string) (pipeline, port.SourceConfig, error) {
+func wire(ctx context.Context, pool *pgxpool.Pool, source string) (pipeline, port.SourceConfig, port.ControlStore, error) {
 	control := postgres.NewControlStore(pool)
 	cfg, err := control.Source(ctx, source)
 	if err != nil {
-		return nil, cfg, fmt.Errorf("load source %q: %w", source, err)
+		return nil, cfg, control, fmt.Errorf("load source %q: %w", source, err)
 	}
 	ua := envOr("USER_AGENT", cfg.UserAgent)
 
@@ -188,7 +197,7 @@ func wire(ctx context.Context, pool *pgxpool.Pool, source string) (pipeline, por
 	case kokkai.SourceName:
 		httpc, err := kokkaihttp.New(cfg.BaseURL, ua, cfg.RateLimit)
 		if err != nil {
-			return nil, cfg, err
+			return nil, cfg, control, err
 		}
 		gw := kokkai.New(httpc)
 		collector := collect.New(
@@ -197,7 +206,7 @@ func wire(ctx context.Context, pool *pgxpool.Pool, source string) (pipeline, por
 		)
 		rm := postgres.NewReadModel(pool)
 		projector := project.New(postgres.NewEventReader(pool), gw, rm, rm, source)
-		return &kokkaiPipeline{collector: collector, projector: projector}, cfg, nil
+		return &kokkaiPipeline{collector: collector, projector: projector}, cfg, control, nil
 
 	case giinroster.SourceName:
 		// egovhttp is a generic rate-limited + robots-compliant GET client (GetAbs);
@@ -206,7 +215,7 @@ func wire(ctx context.Context, pool *pgxpool.Pool, source string) (pipeline, por
 		// 参 host is added to the GetAbs allowlist (SSRF guard; F-005).
 		httpc, err := egovhttp.New(cfg.BaseURL, ua, cfg.RateLimit, "www.sangiin.go.jp")
 		if err != nil {
-			return nil, cfg, err
+			return nil, cfg, control, err
 		}
 		gw := giinroster.New(httpc)
 		collector := collect.New(
@@ -215,12 +224,12 @@ func wire(ctx context.Context, pool *pgxpool.Pool, source string) (pipeline, por
 		)
 		rm := postgres.NewRosterReadModel(pool, giinroster.StreamID(""))
 		projector := project.NewRoster(postgres.NewEventReader(pool), gw, rm, rm, giinroster.SourceName, giinroster.StreamID(""))
-		return &giinRosterPipeline{collector: collector, projector: projector}, cfg, nil
+		return &giinRosterPipeline{collector: collector, projector: projector}, cfg, control, nil
 
 	case sangiin.SourceName: // 参議院本会議投票結果 (touhyoulist) — per-member roll-calls (ADR-000010)
 		httpc, err := egovhttp.New(cfg.BaseURL, ua, cfg.RateLimit)
 		if err != nil {
-			return nil, cfg, err
+			return nil, cfg, control, err
 		}
 		gw := sangiin.New(httpc)
 		collector := collect.New(
@@ -229,12 +238,12 @@ func wire(ctx context.Context, pool *pgxpool.Pool, source string) (pipeline, por
 		)
 		rm := postgres.NewSangiinVoteReadModel(pool)
 		projector := project.NewSangiinVote(postgres.NewEventReader(pool), gw, rm, rm, sangiin.SourceName)
-		return &sangiinVotePipeline{collector: collector, projector: projector, gw: gw, control: control}, cfg, nil
+		return &sangiinVotePipeline{collector: collector, projector: projector, gw: gw, control: control}, cfg, control, nil
 
 	case sangiin.RosterSourceName: // 参議院議員名簿 → legislator_district (house=参議院)
 		httpc, err := egovhttp.New(cfg.BaseURL, ua, cfg.RateLimit)
 		if err != nil {
-			return nil, cfg, err
+			return nil, cfg, control, err
 		}
 		gw := sangiin.New(httpc)
 		collector := collect.New(
@@ -243,12 +252,12 @@ func wire(ctx context.Context, pool *pgxpool.Pool, source string) (pipeline, por
 		)
 		rm := postgres.NewRosterReadModel(pool, sangiin.RosterStreamID(""))
 		projector := project.NewRoster(postgres.NewEventReader(pool), gw, rm, rm, sangiin.RosterSourceName, sangiin.RosterStreamID(""))
-		return &sangiinRosterPipeline{collector: collector, projector: projector, gw: gw, control: control}, cfg, nil
+		return &sangiinRosterPipeline{collector: collector, projector: projector, gw: gw, control: control}, cfg, control, nil
 
 	case egov.SourceName:
 		httpc, err := egovhttp.New(cfg.BaseURL, ua, cfg.RateLimit)
 		if err != nil {
-			return nil, cfg, err
+			return nil, cfg, control, err
 		}
 		gw := egov.New(httpc)
 		collector := collect.NewEgov(
@@ -260,10 +269,10 @@ func wire(ctx context.Context, pool *pgxpool.Pool, source string) (pipeline, por
 		projector := project.NewLaw(reader, gw, lawRM, lawRM, source)
 		changeRM := postgres.NewChangeReadModel(pool)
 		differ := diff.New(reader, diffrpc.New(envOr("DIFFER_URL", "http://differ:9090")), changeRM, changeRM, "egov-differ")
-		return &egovPipeline{collector: collector, projector: projector, differ: differ}, cfg, nil
+		return &egovPipeline{collector: collector, projector: projector, differ: differ}, cfg, control, nil
 
 	default:
-		return nil, cfg, fmt.Errorf("unknown source %q", source)
+		return nil, cfg, control, fmt.Errorf("unknown source %q", source)
 	}
 }
 
@@ -280,9 +289,10 @@ func (k *kokkaiPipeline) poll(ctx context.Context) int {
 	emitted, err := k.collector.PollOnce(ctx, kokkai.SourceName, pollBatch)
 	if err != nil {
 		log.Printf("poll: %v", err)
-		return 0
 	}
-	log.Printf("poll: emitted %d events", emitted)
+	if emitted > 0 {
+		log.Printf("poll: emitted %d events", emitted)
+	}
 	return emitted
 }
 
@@ -340,9 +350,10 @@ func (g *giinRosterPipeline) poll(ctx context.Context) int {
 	emitted, err := g.collector.PollOnce(ctx, giinroster.SourceName, pollBatch)
 	if err != nil {
 		log.Printf("poll: %v", err)
-		return 0
 	}
-	log.Printf("poll: emitted %d events", emitted)
+	if emitted > 0 {
+		log.Printf("poll: emitted %d events", emitted)
+	}
 	return emitted
 }
 
@@ -404,9 +415,10 @@ func (p *sangiinVotePipeline) poll(ctx context.Context) int {
 	emitted, err := p.collector.PollOnce(ctx, sangiin.SourceName, pollBatch)
 	if err != nil {
 		log.Printf("poll: %v", err)
-		return 0
 	}
-	log.Printf("poll: emitted %d events", emitted)
+	if emitted > 0 {
+		log.Printf("poll: emitted %d events", emitted)
+	}
 	return emitted
 }
 
@@ -478,9 +490,10 @@ func (p *sangiinRosterPipeline) poll(ctx context.Context) int {
 	emitted, err := p.collector.PollOnce(ctx, sangiin.RosterSourceName, pollBatch)
 	if err != nil {
 		log.Printf("poll: %v", err)
-		return 0
 	}
-	log.Printf("poll: emitted %d events", emitted)
+	if emitted > 0 {
+		log.Printf("poll: emitted %d events", emitted)
+	}
 	return emitted
 }
 
@@ -549,9 +562,10 @@ func (e *egovPipeline) poll(ctx context.Context) int {
 	emitted, err := e.collector.PollOnce(ctx, egov.SourceName, pollBatch)
 	if err != nil {
 		log.Printf("poll: %v", err)
-		return 0
 	}
-	log.Printf("poll: emitted %d events", emitted)
+	if emitted > 0 {
+		log.Printf("poll: emitted %d events", emitted)
+	}
 	return emitted
 }
 
@@ -628,7 +642,7 @@ func (e *egovPipeline) autoDiscover(ctx context.Context) {
 // backlog can take a long PollOnce; the project loop runs on its own tick (plus
 // an in-process wake when a poll emits events) so it folds events into the read
 // models as they are appended, never waiting for the whole poll batch.
-func runDaemon(ctx context.Context, p pipeline) {
+func runDaemon(ctx context.Context, p pipeline, source string, control port.ControlStore) {
 	log.Printf("collector daemon started (source=%s, poll=%s, project=%s, discover=%s)",
 		p.source(), daemonInterval, projectInterval, discoverInterval)
 
@@ -638,28 +652,65 @@ func runDaemon(ctx context.Context, p pipeline) {
 	wg.Add(2)
 
 	// Poll loop: refresh the watch list (daily), poll due watches, and wake the
-	// project loop when something was appended.
+	// project loop when something was appended. Wrapped in recoverLoop so a panic
+	// (e.g. a gateway bug on unexpected upstream data) logs and restarts the loop
+	// instead of silently killing the whole daemon process (H-C3 sibling: a crash
+	// here must not go unnoticed either).
 	go func() {
 		defer wg.Done()
-		ticker := time.NewTicker(daemonInterval)
-		defer ticker.Stop()
-		// Zero value forces an autoDiscover on the first pass so a fresh start (or a
-		// restart after downtime) refreshes the watch list before polling (ADR-000012).
-		var lastDiscover time.Time
-		for {
-			if time.Since(lastDiscover) >= discoverInterval {
-				p.autoDiscover(ctx)
-				lastDiscover = time.Now()
+		recoverLoop(ctx, "poll", func() {
+			ticker := time.NewTicker(daemonInterval)
+			defer ticker.Stop()
+			// Zero value forces an autoDiscover on the first pass so a fresh start (or
+			// a restart after downtime) refreshes the watch list before polling
+			// (ADR-000012).
+			var lastDiscover time.Time
+			wasEnabled := true
+			for {
+				// control.source.enabled is re-read every tick (not just at startup) so
+				// an operator's kill switch takes effect on a running daemon, not only
+				// on the next restart.
+				enabled := true
+				if cfg, err := control.Source(ctx, source); err != nil {
+					log.Printf("poll: reload source config: %v", err)
+				} else {
+					enabled = cfg.Enabled
+				}
+				if !enabled {
+					if wasEnabled {
+						log.Printf("source %s disabled in control.source; pausing poll loop", source)
+					}
+					wasEnabled = false
+				} else {
+					if !wasEnabled {
+						log.Printf("source %s re-enabled; resuming poll loop", source)
+					}
+					wasEnabled = true
+
+					if time.Since(lastDiscover) >= discoverInterval {
+						p.autoDiscover(ctx)
+						lastDiscover = time.Now()
+					}
+					if p.poll(ctx) > 0 {
+						nudge(wake)
+					}
+				}
+
+				// Written every tick regardless of enabled/disabled: a heartbeat proves
+				// the loop itself is alive, which is exactly what should page an
+				// operator even while intentionally paused for long stretches — a
+				// wedged loop and a deliberately-disabled source must not look the same.
+				if err := control.Heartbeat(ctx, source, time.Now()); err != nil {
+					log.Printf("poll: heartbeat: %v", err)
+				}
+
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
 			}
-			if p.poll(ctx) > 0 {
-				nudge(wake)
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-		}
+		})
 	}()
 
 	// Project loop: catch-up subscription. Project once up front, then on each wake
@@ -668,21 +719,45 @@ func runDaemon(ctx context.Context, p pipeline) {
 	// poll — is safe and converges.
 	go func() {
 		defer wg.Done()
-		ticker := time.NewTicker(projectInterval)
-		defer ticker.Stop()
-		for {
-			p.project(ctx)
-			select {
-			case <-ctx.Done():
-				return
-			case <-wake:
-			case <-ticker.C:
+		recoverLoop(ctx, "project", func() {
+			ticker := time.NewTicker(projectInterval)
+			defer ticker.Stop()
+			for {
+				p.project(ctx)
+				select {
+				case <-ctx.Done():
+					return
+				case <-wake:
+				case <-ticker.C:
+				}
 			}
-		}
+		})
 	}()
 
 	wg.Wait()
 	log.Print("collector daemon stopping")
+}
+
+// recoverLoop runs body, restarting it after logging if it panics, until ctx is
+// done. A panic inside one of the daemon's two loops must not silently kill the
+// whole process (leaving `docker restart` as the only recovery signal) — it is
+// logged and the loop resumes on the next tick interval instead.
+func recoverLoop(ctx context.Context, name string, body func()) {
+	for {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("%s loop panicked, restarting: %v", name, r)
+				}
+			}()
+			body()
+		}()
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+	}
 }
 
 // nudge does a non-blocking send so the poll loop never blocks on a busy project
@@ -754,4 +829,32 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// probeHeartbeat is the container healthcheck entry point (`collector
+// --healthcheck [--source S]`): it connects, reads the daemon's last heartbeat
+// for source, and exits 0 only if it is fresh. The collector has no HTTP
+// listener (unlike cmd/api's /healthz), so this is a short-lived DB round trip
+// instead, matching how the db/migrate services already healthcheck via a CLI.
+func probeHeartbeat(source string) int {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	pool, err := postgres.Connect(ctx)
+	if err != nil {
+		log.Printf("healthcheck: connect: %v", err)
+		return 1
+	}
+	defer pool.Close()
+
+	beatAt, err := postgres.NewControlStore(pool).LastHeartbeat(ctx, source)
+	if err != nil {
+		log.Printf("healthcheck: last heartbeat for %s: %v", source, err)
+		return 1
+	}
+	if age := time.Since(beatAt); age > heartbeatStaleAfter {
+		log.Printf("healthcheck: stale heartbeat for %s (age %s)", source, age)
+		return 1
+	}
+	return 0
 }

@@ -2,11 +2,22 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"s4rciv.org/api/internal/port"
+)
+
+// Failure backoff bounds (independent of the normal poll cadence): a failing
+// stream is retried soon and backs off exponentially with each consecutive
+// failure, capped so a persistently broken stream is still revisited hourly
+// rather than falling all the way back to the 24h cadence.
+const (
+	failureBackoffBase = 1 * time.Minute
+	failureBackoffMax  = 1 * time.Hour
 )
 
 type ControlStore struct {
@@ -66,19 +77,65 @@ func (c *ControlStore) UpsertWatch(ctx context.Context, w port.Watch) error {
 	return err
 }
 
+// MarkPolled records a poll outcome. On success, next_due_at is the caller's
+// normal poll cadence and the failure streak resets. On failure, next_due_at
+// (nextDue is ignored) is computed here as an exponential backoff off the
+// stream's own consecutive_failures — independent of the 24h poll cadence — so a
+// transient error is retried soon while a persistently broken stream still backs
+// off, capped at failureBackoffMax rather than waiting a full day.
 func (c *ControlStore) MarkPolled(ctx context.Context, streamID string, polledAt, nextDue time.Time, ok bool) error {
-	_, err := c.pool.Exec(ctx, `
+	if ok {
+		_, err := c.pool.Exec(ctx, `
+			INSERT INTO control.poll_state
+				(stream_id, last_polled_at, next_due_at, backoff_until, consecutive_failures)
+			VALUES ($1, $2, $3, NULL, 0)
+			ON CONFLICT (stream_id) DO UPDATE SET
+				last_polled_at = $2,
+				next_due_at = $3,
+				backoff_until = NULL,
+				consecutive_failures = 0`,
+			streamID, polledAt, nextDue)
+		return err
+	}
+
+	var failures int
+	err := c.pool.QueryRow(ctx,
+		`SELECT consecutive_failures FROM control.poll_state WHERE stream_id = $1`, streamID,
+	).Scan(&failures)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	failures++
+	retryAt := polledAt.Add(failureBackoff(failures))
+
+	_, err = c.pool.Exec(ctx, `
 		INSERT INTO control.poll_state
 			(stream_id, last_polled_at, next_due_at, backoff_until, consecutive_failures)
-		VALUES ($1, $2, $3, $4, $5)
+		VALUES ($1, $2, $3, $3, $4)
 		ON CONFLICT (stream_id) DO UPDATE SET
-			last_polled_at = EXCLUDED.last_polled_at,
-			next_due_at = EXCLUDED.next_due_at,
-			backoff_until = CASE WHEN $6 THEN NULL ELSE EXCLUDED.next_due_at END,
-			consecutive_failures = CASE WHEN $6 THEN 0
-				ELSE control.poll_state.consecutive_failures + 1 END`,
-		streamID, polledAt, nextDue, backoffArg(ok, nextDue), failArg(ok), ok)
+			last_polled_at = $2,
+			next_due_at = $3,
+			backoff_until = $3,
+			consecutive_failures = $4`,
+		streamID, polledAt, retryAt, failures)
 	return err
+}
+
+// failureBackoff is 1m, 2m, 4m, ... doubling per consecutive failure, capped at
+// failureBackoffMax.
+func failureBackoff(consecutiveFailures int) time.Duration {
+	shift := consecutiveFailures - 1
+	if shift < 0 {
+		shift = 0
+	}
+	if shift > 20 { // guard against overflow; failureBackoffMax caps well before this
+		shift = 20
+	}
+	d := failureBackoffBase * time.Duration(int64(1)<<shift)
+	if d > failureBackoffMax || d <= 0 {
+		d = failureBackoffMax
+	}
+	return d
 }
 
 // MarkPending schedules a soon re-poll for a Resource that exists but whose
@@ -98,16 +155,19 @@ func (c *ControlStore) MarkPending(ctx context.Context, streamID string, polledA
 	return err
 }
 
-func backoffArg(ok bool, nextDue time.Time) any {
-	if ok {
-		return nil
-	}
-	return nextDue
+func (c *ControlStore) Heartbeat(ctx context.Context, source string, at time.Time) error {
+	_, err := c.pool.Exec(ctx, `
+		INSERT INTO control.daemon_heartbeat (source, beat_at)
+		VALUES ($1, $2)
+		ON CONFLICT (source) DO UPDATE SET beat_at = EXCLUDED.beat_at`,
+		source, at)
+	return err
 }
 
-func failArg(ok bool) int {
-	if ok {
-		return 0
-	}
-	return 1
+func (c *ControlStore) LastHeartbeat(ctx context.Context, source string) (time.Time, error) {
+	var beatAt time.Time
+	err := c.pool.QueryRow(ctx,
+		`SELECT beat_at FROM control.daemon_heartbeat WHERE source = $1`, source,
+	).Scan(&beatAt)
+	return beatAt, err
 }

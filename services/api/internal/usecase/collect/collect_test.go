@@ -72,6 +72,10 @@ func (c *fakeControl) MarkPending(_ context.Context, streamID string, _, _ time.
 	c.pending = append(c.pending, streamID)
 	return nil
 }
+func (c *fakeControl) Heartbeat(context.Context, string, time.Time) error { return nil }
+func (c *fakeControl) LastHeartbeat(context.Context, string) (time.Time, error) {
+	return time.Time{}, nil
+}
 
 type fakeLister struct{ refs []port.MeetingRef }
 
