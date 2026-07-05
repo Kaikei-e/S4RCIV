@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -136,5 +137,114 @@ func TestRedirectHopHonorsCachedRobots(t *testing.T) {
 	_, _, err = c.Get(context.Background(), "hop", nil)
 	if err == nil || !strings.Contains(err.Error(), "robots.txt disallows redirect target") {
 		t.Fatalf("redirect into a robots-disallowed path must be refused, got err=%v", err)
+	}
+}
+
+// A transient robots.txt fetch failure (e.g. a network blip on first contact)
+// must not permanently disallow every later request to the host: the next call
+// has to retry the fetch, not replay a cached error forever.
+func TestRobotsFetchErrorIsRetriedNotCachedForever(t *testing.T) {
+	var calls int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/robots.txt", func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				t.Fatal("ResponseWriter does not support hijacking")
+			}
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				t.Fatalf("hijack: %v", err)
+			}
+			conn.Close() // abrupt close on first fetch => client sees a transport error
+			return
+		}
+		w.WriteHeader(http.StatusNotFound) // second+ fetch: allow all
+	})
+	mux.HandleFunc("/target", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, err := New(srv.URL, "test-agent", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := c.Get(context.Background(), "target", nil); err == nil {
+		t.Fatal("first Get: want error from the robots.txt fetch failure, got nil")
+	}
+
+	body, status, err := c.Get(context.Background(), "target", nil)
+	if err != nil {
+		t.Fatalf("second Get: want success after the robots.txt retry, got err=%v", err)
+	}
+	if status != 200 || string(body) != "ok" {
+		t.Fatalf("status=%d body=%q, want 200 \"ok\"", status, body)
+	}
+	if n := atomic.LoadInt32(&calls); n != 2 {
+		t.Fatalf("robots.txt fetched %d times, want 2 (retried after the first failure)", n)
+	}
+}
+
+// A 429/503 response extends the source-wide gate (via Retry-After) so the very
+// next request — not just a retry of the throttled one — waits it out, instead
+// of hammering the source again at the normal interval.
+func TestGetOn429ExtendsGateForNextRequest(t *testing.T) {
+	var calls int32
+	srv, requestTimes := newTestServer(t, map[string]http.HandlerFunc{
+		"/target": func(w http.ResponseWriter, _ *http.Request) {
+			if atomic.AddInt32(&calls, 1) == 1 {
+				w.Header().Set("Retry-After", "1")
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			_, _ = w.Write([]byte("ok"))
+		},
+	})
+	c, err := New(srv.URL, "test-agent", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, status, err := c.Get(context.Background(), "target", nil); err != nil || status != http.StatusTooManyRequests {
+		t.Fatalf("first Get: status=%d err=%v, want 429/nil", status, err)
+	}
+	if _, _, err := c.Get(context.Background(), "target", nil); err != nil {
+		t.Fatalf("second Get: %v", err)
+	}
+	times := requestTimes() // [0]=robots.txt [1]=first /target (429) [2]=second /target
+	if len(times) != 3 {
+		t.Fatalf("requests = %d, want 3", len(times))
+	}
+	if gap := times[2].Sub(times[1]); gap < 900*time.Millisecond {
+		t.Fatalf("gap after 429 = %v, want >= ~1s (Retry-After)", gap)
+	}
+}
+
+func TestNextIntervalHonorsRetryAfterOnThrottle(t *testing.T) {
+	if got := nextInterval(0, http.StatusTooManyRequests, 5*time.Second); got != 5*time.Second {
+		t.Fatalf("nextInterval = %v, want 5s (Retry-After)", got)
+	}
+	if got := nextInterval(0, http.StatusServiceUnavailable, 5*time.Second); got != 5*time.Second {
+		t.Fatalf("nextInterval = %v, want 5s (Retry-After) on 503", got)
+	}
+}
+
+func TestNextIntervalFallsBackWithoutRetryAfter(t *testing.T) {
+	if got := nextInterval(0, http.StatusTooManyRequests, 0); got != defaultThrottleBackoff {
+		t.Fatalf("nextInterval = %v, want default %v", got, defaultThrottleBackoff)
+	}
+}
+
+func TestNextIntervalCapsRetryAfter(t *testing.T) {
+	if got := nextInterval(0, http.StatusTooManyRequests, 30*time.Minute); got != maxThrottleBackoff {
+		t.Fatalf("nextInterval = %v, want cap %v", got, maxThrottleBackoff)
+	}
+}
+
+func TestNextIntervalUnaffectedOnSuccess(t *testing.T) {
+	if got := nextInterval(3*time.Second, http.StatusOK, 999*time.Second); got != 3*time.Second {
+		t.Fatalf("nextInterval = %v, want base 3s unaffected by Retry-After on 200", got)
 	}
 }

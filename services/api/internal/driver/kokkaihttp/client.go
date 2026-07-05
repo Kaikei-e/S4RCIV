@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,19 @@ import (
 
 // maxRedirects caps redirect chains; every hop is re-validated by checkRedirect.
 const maxRedirects = 10
+
+// maxBodyBytes bounds a single response body. Exceeding it is an error, not a
+// silent truncation: a truncated body would still be content-hashed and appended
+// to the immutable observation log as if it were the real resource (DISCIPLINE §3).
+const maxBodyBytes = 64 << 20
+
+// Throttle backoff bounds (DISCIPLINE §1): on 429/503 the whole source pauses for
+// the upstream's Retry-After when present, else this fallback, capped so a
+// malformed/hostile Retry-After cannot wedge the daemon indefinitely.
+const (
+	defaultThrottleBackoff = 60 * time.Second
+	maxThrottleBackoff     = 15 * time.Minute
+)
 
 // Client serializes and spaces requests to one source. Construct one per source.
 type Client struct {
@@ -30,9 +44,9 @@ type Client struct {
 	mu   sync.Mutex // serializes requests (no parallel/burst access)
 	next time.Time  // earliest time the next request may go out
 
-	robotsOnce sync.Once
-	robotsErr  error
-	robots     *robotstxt.Group
+	robotsMu    sync.Mutex // guards robots below; distinct from mu (gatedDo already holds mu)
+	robotsReady bool       // set only on a successful fetch (or a confirmed 404 => allow-all)
+	robots      *robotstxt.Group
 }
 
 func New(baseURL, userAgent string, interval time.Duration) (*Client, error) {
@@ -68,7 +82,10 @@ func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
 	if !strings.EqualFold(u.Hostname(), c.base.Hostname()) {
 		return fmt.Errorf("refusing redirect off the source host: %q (SSRF guard)", u.Hostname())
 	}
-	if c.robots != nil && !c.robots.Test(u.Path) {
+	c.robotsMu.Lock()
+	robots := c.robots
+	c.robotsMu.Unlock()
+	if robots != nil && !robots.Test(u.Path) {
 		return fmt.Errorf("robots.txt disallows redirect target %q", u.Path)
 	}
 	return nil
@@ -91,7 +108,11 @@ func (c *Client) Get(ctx context.Context, endpoint string, q url.Values) ([]byte
 
 // gatedDo serializes the request behind the per-source mutex and waits out the
 // interval since the previous request. Every outbound request — including the
-// robots.txt fetch — goes through here, so first contact never bursts.
+// robots.txt fetch — goes through here, so first contact never bursts. A 429/503
+// extends the gate beyond the normal interval (via Retry-After when present), so
+// every later request on this source — not just the one that got throttled —
+// backs off (DISCIPLINE §1: never escalate into a block by retrying at the usual
+// pace after an explicit throttle signal).
 func (c *Client) gatedDo(ctx context.Context, rawURL string) ([]byte, int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -103,56 +124,111 @@ func (c *Client) gatedDo(ctx context.Context, rawURL string) ([]byte, int, error
 		}
 	}
 
-	body, status, err := c.do(ctx, rawURL)
-	c.next = time.Now().Add(c.interval)
+	body, status, retryAfter, err := c.do(ctx, rawURL)
+	c.next = time.Now().Add(nextInterval(c.interval, status, retryAfter))
 	return body, status, err
 }
 
-func (c *Client) do(ctx context.Context, rawURL string) ([]byte, int, error) {
+// nextInterval is the normal per-source interval, except after a 429/503 where it
+// is stretched to the upstream's Retry-After (or a fallback), capped at
+// maxThrottleBackoff and never shorter than the normal interval.
+func nextInterval(base time.Duration, status int, retryAfter time.Duration) time.Duration {
+	if status != http.StatusTooManyRequests && status != http.StatusServiceUnavailable {
+		return base
+	}
+	d := retryAfter
+	if d <= 0 {
+		d = defaultThrottleBackoff
+	}
+	if d > maxThrottleBackoff {
+		d = maxThrottleBackoff
+	}
+	if d < base {
+		d = base
+	}
+	return d
+}
+
+// retryAfterDuration parses Retry-After (RFC 9110 §10.2.3: delay-seconds or an
+// HTTP-date). Returns 0 when absent, unparseable, or already past.
+func retryAfterDuration(resp *http.Response) time.Duration {
+	v := resp.Header.Get("Retry-After")
+	if v == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
+}
+
+func (c *Client) do(ctx context.Context, rawURL string) ([]byte, int, time.Duration, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 	req.Header.Set("User-Agent", c.ua)
 	req.Header.Set("Accept", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	// Read one byte past the cap: hitting it means the body was truncated, which
+	// must fail loudly rather than silently hash+append a partial resource.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if err != nil {
-		return nil, resp.StatusCode, err
+		return nil, resp.StatusCode, 0, err
 	}
-	return body, resp.StatusCode, nil
+	if len(body) > maxBodyBytes {
+		return nil, resp.StatusCode, 0, fmt.Errorf("response body exceeds %d byte limit", maxBodyBytes)
+	}
+	return body, resp.StatusCode, retryAfterDuration(resp), nil
 }
 
 // checkRobots lazily fetches and caches robots.txt for the host and rejects a
 // disallowed path. A missing robots.txt is treated as "allow all". The fetch
 // consumes an interval slot (gatedDo) like any other request, so first contact
-// does not send two back-to-back requests.
+// does not send two back-to-back requests. Only a successful fetch (parsed
+// groups, or a confirmed 404) is cached — a transient fetch error (network blip)
+// is retried on the next call instead of permanently failing every request on
+// this source for the life of the process.
 func (c *Client) checkRobots(ctx context.Context, path string) error {
-	c.robotsOnce.Do(func() {
+	c.robotsMu.Lock()
+	ready := c.robotsReady
+	c.robotsMu.Unlock()
+
+	if !ready {
 		robotsURL := c.base.Scheme + "://" + c.base.Host + "/robots.txt"
 		body, status, err := c.gatedDo(ctx, robotsURL)
 		if err != nil {
-			c.robotsErr = fmt.Errorf("fetch robots.txt: %w", err)
-			return
+			return fmt.Errorf("fetch robots.txt: %w", err)
 		}
-		if status == http.StatusNotFound {
-			return // no robots.txt => allow all
+
+		c.robotsMu.Lock()
+		if !c.robotsReady {
+			if status != http.StatusNotFound {
+				data, perr := robotstxt.FromBytes(body)
+				if perr != nil {
+					c.robotsMu.Unlock()
+					return fmt.Errorf("parse robots.txt: %w", perr)
+				}
+				c.robots = data.FindGroup(c.ua)
+			}
+			c.robotsReady = true
 		}
-		data, err := robotstxt.FromBytes(body)
-		if err != nil {
-			c.robotsErr = fmt.Errorf("parse robots.txt: %w", err)
-			return
-		}
-		c.robots = data.FindGroup(c.ua)
-	})
-	if c.robotsErr != nil {
-		return c.robotsErr
+		c.robotsMu.Unlock()
 	}
-	if c.robots != nil && !c.robots.Test(path) {
+
+	c.robotsMu.Lock()
+	robots := c.robots
+	c.robotsMu.Unlock()
+	if robots != nil && !robots.Test(path) {
 		return fmt.Errorf("robots.txt disallows %s", path)
 	}
 	return nil
