@@ -5,7 +5,7 @@
 	let { data }: { data: PageData } = $props();
 
 	// Build a querystring from the active filters, with optional overrides
-	// (used for the next-page link and the Atom feed URL).
+	// (used for the next-page link).
 	function qs(extra: Record<string, string> = {}) {
 		const f = data.filters;
 		const p = new URLSearchParams();
@@ -18,7 +18,6 @@
 		return s ? `?${s}` : '';
 	}
 
-	const feedHref = $derived(`/timeline.atom${qs()}`);
 	// Keyset pager over the immutable seq spine: prev = newer (seq >), next = older
 	// (seq <). An empty token means that end has no further page. total_count + page
 	// are orientation only — keyset has no random page jump (no clickable numbers).
@@ -101,7 +100,6 @@
 		<div class="panel-head">
 			<span class="label">横断タイムライン<span class="tz">（時刻 JST）</span></span>
 			<span class="count mono">全 {data.totalCount.toLocaleString()} 件</span>
-			<a class="feed" href={feedHref} title="この絞り込みの Atom フィードを購読（ウォッチ）">購読</a>
 		</div>
 
 		{#if data.error}
@@ -134,7 +132,7 @@
 
 	<footer class="foot">
 		<p>
-			S4RCIV は公的一次記録の受動・読取専用フライトレコーダです。各記録は出典・取得時刻・ハッシュ連鎖の連結とともに表示されます（完全性の検証ツールは今後提供）。
+			S4RCIV は公的一次記録の受動・読取専用フライトレコーダです。各記録は出典・取得時刻・ハッシュ連鎖の連結とともに表示され、会議録・法令の詳細ページから完全性を検証できます。
 		</p>
 	</footer>
 </main>
@@ -256,19 +254,6 @@
 		font-size: 12px;
 		color: var(--text-3);
 	}
-	.feed {
-		font-size: 12px;
-		padding: 2px 8px;
-		border: 1px solid var(--hairline-2);
-		border-radius: var(--r-sm);
-		text-decoration: none;
-		color: var(--text-2);
-		white-space: nowrap;
-	}
-	.feed:hover {
-		color: var(--accent);
-		border-color: var(--accent);
-	}
 	.state {
 		color: var(--text-2);
 		padding: 24px 0;
@@ -320,7 +305,6 @@
 	}
 	/* Touch: enlarge link targets to ≥44px (DESIGN_LANGUAGE §9.3 / WCAG 2.5.5). */
 	@media (pointer: coarse) {
-		.feed,
 		.pg {
 			min-height: 44px;
 			display: inline-flex;

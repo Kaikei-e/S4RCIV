@@ -38,7 +38,6 @@
 	<nav class="nav" aria-label="サイトナビ">
 		<a class="navlink" href="/votes" title="衆院の記名投票を小選挙区別に地図で見る">衆院</a>
 		<a class="navlink" href="/sangiin" title="参院の記名投票を都道府県別に地図で見る">参院</a>
-		<a class="navlink" href="/timeline.atom" title="横断タイムラインの Atom フィードを購読">購読</a>
 	</nav>
 
 	<p class="ledger mono">

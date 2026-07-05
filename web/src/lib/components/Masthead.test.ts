@@ -8,12 +8,11 @@ import Masthead from './Masthead.svelte';
 // and NO "running" status (passive sentinel; integrity is not a per-record badge,
 // ADR-000014 / 設計原則①). Coverage + checkpoint render only when their data exists.
 describe('Masthead', () => {
-	it('shows the wordmark linking home and the three nav links', () => {
+	it('shows the wordmark linking home and the nav links', () => {
 		render(Masthead);
 		expect(screen.getByRole('link', { name: 'S4RCIV' })).toHaveAttribute('href', '/');
 		expect(screen.getByRole('link', { name: '衆院' })).toHaveAttribute('href', '/votes');
 		expect(screen.getByRole('link', { name: '参院' })).toHaveAttribute('href', '/sangiin');
-		expect(screen.getByRole('link', { name: '購読' })).toHaveAttribute('href', '/timeline.atom');
 	});
 
 	it('states the passive, non-judging stance in plain language', () => {
