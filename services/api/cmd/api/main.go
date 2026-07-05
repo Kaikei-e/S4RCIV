@@ -5,11 +5,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"connectrpc.com/connect"
@@ -70,8 +73,32 @@ func main() {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	log.Printf("api listening on %s", addr)
-	log.Fatal(srv.ListenAndServe())
+
+	// A container's SIGTERM (compose stop/restart/deploy) must drain in-flight
+	// requests instead of dropping them mid-response, unlike the previous
+	// log.Fatal(ListenAndServe()) which gave every connection an unclean severance.
+	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	serveErr := make(chan error, 1)
+	go func() {
+		log.Printf("api listening on %s", addr)
+		serveErr <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serveErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("serve: %v", err)
+		}
+	case <-shutdownCtx.Done():
+		log.Print("api shutting down")
+		drainCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(drainCtx); err != nil {
+			log.Printf("shutdown: %v", err)
+		}
+	}
 }
 
 func probe() int {
