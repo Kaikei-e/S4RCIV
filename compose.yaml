@@ -9,6 +9,16 @@ networks:
   app: {}
   data: {}
 
+# Every service's stdout/stderr shares the host disk with the append-only
+# observation log (db_data); the default json-file driver has no rotation, so an
+# unbounded log would compete with — and could eventually starve — the ground
+# truth for space. 10m x 3 files per service is generous for operational logs.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: postgres:18.4-trixie@sha256:8ff36f3c66371cba71d20ceedccfc3de9669a68737607888c4ef0af93abe8e39
@@ -32,11 +42,25 @@ services:
       start_period: 10s
     security_opt:
       - no-new-privileges:true
+    # initdb/first-boot chown of the mounted volume needs CHOWN/DAC_OVERRIDE/
+    # FOWNER, and the postgres process itself starts as root then drops to the
+    # postgres user (SETUID/SETGID) via the image's own entrypoint — these five
+    # are the minimal set verified to still start cleanly; every other default
+    # capability (NET_ADMIN, SYS_ADMIN, SYS_PTRACE, ...) is dropped.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     networks:
       - data
     mem_limit: 2g
     pids_limit: 512
     restart: unless-stopped
+    logging: *default-logging
 
   migrate:
     image: arigaio/atlas:1.2.1-alpine@sha256:2cbaaa3c0415d2fbb21399bad15329bb5f60db2f9d04f265aec51abfdfcf8748
@@ -71,6 +95,7 @@ services:
     mem_limit: 512m
     pids_limit: 256
     restart: "no"
+    logging: *default-logging
 
   api:
     build:
@@ -111,6 +136,7 @@ services:
     mem_limit: 512m
     pids_limit: 256
     restart: unless-stopped
+    logging: *default-logging
 
   collector:
     build:
@@ -120,7 +146,7 @@ services:
       migrate:
         condition: service_completed_successfully
       differ:
-        condition: service_started
+        condition: service_healthy
     # Command side (CQRS): discovers/polls sources and projects read models.
     # The egov-law diff usecase calls the differ over Connect-RPC at DIFFER_URL.
     # Default command is the daemon; override for one-shot ops, e.g.
@@ -138,6 +164,15 @@ services:
     secrets:
       - db_password
       - checkpoint_signing_key
+    # The daemon has no HTTP listener, so the healthcheck is a self-probe of its
+    # own daemon_heartbeat freshness (audit H-C3): CMD execs the binary itself
+    # rather than a shell (distroless-style, no shell in this image either).
+    healthcheck:
+      test: ["CMD", "/app/collector", "-healthcheck"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -148,6 +183,7 @@ services:
     mem_limit: 768m
     pids_limit: 256
     restart: unless-stopped
+    logging: *default-logging
 
   # Second command-side daemon for the egov-law source. The kokkai and egov-law
   # collectors run in parallel because they target different hosts; each enforces
@@ -162,7 +198,7 @@ services:
       migrate:
         condition: service_completed_successfully
       differ:
-        condition: service_started
+        condition: service_healthy
     command: ["--source", "egov-law", "run"]
     environment:
       POSTGRES_HOST: db
@@ -174,6 +210,12 @@ services:
       DIFFER_URL: http://differ:9090
     secrets:
       - db_password
+    healthcheck:
+      test: ["CMD", "/app/collector", "-healthcheck", "--source", "egov-law"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -184,6 +226,7 @@ services:
     mem_limit: 768m
     pids_limit: 256
     restart: unless-stopped
+    logging: *default-logging
 
   differ:
     build:
@@ -193,6 +236,15 @@ services:
     # differ:9090. It only computes 法令標準XML diffs + classification from bytes.
     environment:
       DIFFER_PORT: "9090"
+    # No shell in the distroless image, so CMD execs the binary's own
+    # --healthcheck mode (a self-probe of the /healthz route it already serves)
+    # instead of curl/wget.
+    healthcheck:
+      test: ["CMD", "/app/differ", "--healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -203,6 +255,7 @@ services:
     mem_limit: 1g
     pids_limit: 256
     restart: unless-stopped
+    logging: *default-logging
 
   web:
     build:
@@ -241,6 +294,7 @@ services:
     mem_limit: 768m
     pids_limit: 256
     restart: unless-stopped
+    logging: *default-logging
 
 volumes:
   db_data:
