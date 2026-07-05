@@ -1,0 +1,47 @@
+# Digest-pinned base images and toolchain images (compose.yaml, Dockerfiles) only
+# move when a human bumps them — without this, a pinned digest never receives an
+# upstream security fix. Dependabot opens the bump PRs; the existing CI
+# (.github/workflows/test.yml) is the gate that actually verifies each one.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /services/api
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: cargo
+    directory: /services/differ
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /services/api
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /services/differ
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /web
+    schedule:
+      interval: weekly
+
+  # compose.yaml's own image: lines (postgres, arigaio/atlas) — the docker
+  # ecosystem also scans docker-compose files in the given directory.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
