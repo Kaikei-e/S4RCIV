@@ -9,6 +9,11 @@ import type { Handle } from '@sveltejs/kit';
 // HSTS is also set at the edge (Cloudflare); emitting it here too keeps the
 // guarantee when the app is reached without the edge in front (defense in depth).
 // Permissions-Policy disables powerful browser features the site never uses.
+// Routes with no per-request data (prerendered at build time — see their
+// +page.ts) are safe to cache at the edge; everything else stays uncached so a
+// CDN never serves stale record data.
+const CACHEABLE_ROUTE_IDS = new Set(['/about', '/terms', '/privacy', '/attribution']);
+
 export const handle: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);
 	response.headers.set('X-Content-Type-Options', 'nosniff');
@@ -17,5 +22,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
 	response.headers.set('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
 	response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+	if (event.route.id && CACHEABLE_ROUTE_IDS.has(event.route.id)) {
+		response.headers.set('Cache-Control', 'public, max-age=3600');
+	}
 	return response;
 };
