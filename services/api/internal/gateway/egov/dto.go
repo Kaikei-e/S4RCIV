@@ -57,6 +57,22 @@ type lawDataResponse struct {
 	LawFullText  string       `json:"law_full_text"` // base64-encoded 法令標準XML
 }
 
+// ── /law_revisions/{law_id} (gap-recovery; v2) ───────────────────────────────
+// Field names per the v2 OpenAPI spec (lawapi-v2.yaml); only the fields the
+// gap-recovery path consumes are typed. Verify against a live response before
+// relying on this in production (docs/refine/2026-07-06-egov-law-api-v2.md §5).
+
+type lawRevisionsResponse struct {
+	Revisions []lawRevisionEntry `json:"revisions"`
+}
+
+type lawRevisionEntry struct {
+	LawRevisionID            string `json:"law_revision_id"`
+	AmendmentPromulgateDate  string `json:"amendment_promulgate_date"`
+	AmendmentEnforcementDate string `json:"amendment_enforcement_date"`
+	AmendmentLawID           string `json:"amendment_law_id"`
+}
+
 // ── /updatelawlists/{yyyyMMdd} (re-poll; v1-shaped) ──────────────────────────
 // The updated-law list nests entries under a top-level array (or object). e-Gov
 // returns UpperCamelCase keys here; only the fields used are typed.

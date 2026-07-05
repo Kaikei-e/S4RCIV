@@ -21,6 +21,32 @@ type LawLister interface {
 	ListUpdated(ctx context.Context, scope ListScope) ([]LawRef, error)
 }
 
+// LawRevision is one entry in a law's amendment history, as enumerated by
+// /law_revisions/{law_id} (v2). Used only for gap-recovery (RevisionLister),
+// never as the discover signal LawLister.ListUpdated already owns.
+type LawRevision struct {
+	RevisionID      string     // law_revision_id — the /law_data/{id} path key
+	EnforcementDate *time.Time // amendment_enforcement_date; nil if blank/未施行
+	PromulgateDate  *time.Time // amendment_promulgate_date; nil if blank
+	AmendmentLawID  string     // amendment_law_id — the amending law that produced this revision
+}
+
+// RevisionLister enumerates one law's full revision history via
+// /law_revisions/{law_id} (v2). Distinct from LawLister: this is a per-law,
+// gap-recovery lookup, not corpus-wide discovery.
+type RevisionLister interface {
+	ListRevisions(ctx context.Context, lawID string) ([]LawRevision, error)
+}
+
+// RevisionFetcher fetches one historical revision's byte-exact snapshot by
+// revision_id via /law_data/{revision_id} (v2). A 404 here means e-Gov never
+// published or no longer retains that specific historical snapshot — it must
+// never be resolved through the law-existence oracle (absenceOrPending): the
+// law itself may well still exist, only this named past revision is missing.
+type RevisionFetcher interface {
+	FetchRevision(ctx context.Context, revisionID string) (FetchResult, error)
+}
+
 // LawNormalizer is the anti-corruption parse from canonical 法令標準XML bytes to
 // the interpretation-plane domain. Pure with respect to a snapshot.
 type LawNormalizer interface {

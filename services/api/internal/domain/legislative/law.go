@@ -74,6 +74,16 @@ type LawContent struct {
 // LawStreamID is the deterministic stream identity for an e-Gov 法令ID.
 func LawStreamID(lawID string) string { return "egov-law:" + lawID }
 
+// LawRevisionStreamID is the deterministic stream identity for one historical
+// revision recovered via /law_revisions + /law_data/{revision_id} gap-recovery
+// (RecoverRevisions). Deliberately a DIFFERENT stream from LawStreamID(lawID):
+// the recurring poll's StreamState (current-content dedup) must never be
+// disturbed by a recovered past snapshot, so each revision gets its own,
+// never-repolled, single-event stream.
+func LawRevisionStreamID(lawID, revisionID string) string {
+	return "egov-law-rev:" + lawID + ":" + revisionID
+}
+
 // ── 法令標準XML decoding shapes ──────────────────────────────────────────────
 // Only the structural elements the eId contract materializes are typed; unknown
 // elements are ignored by encoding/xml.

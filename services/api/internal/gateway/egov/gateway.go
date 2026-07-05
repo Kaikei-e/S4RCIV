@@ -31,7 +31,15 @@ const SourceName = "egov-law"
 // mediaTypeXML is stamped on the snapshot and passed to the differ.
 const mediaTypeXML = "application/xml"
 
-// updateListV1Base is the v1 fallback for the updated-law list when v2 returns 404.
+// updateListV1Base is the permanent route for the updated-law list: v2 has no
+// bulk "changed since date" endpoint with matching semantics, so this is not a
+// stopgap awaiting a v2 replacement. v2's closest analog, /laws with
+// amendment_promulgate_date_from/to, filters by the amending law's PROMULGATION
+// date; updatelawlists (and this adapter's whole discover contract) is keyed on
+// ENFORCEMENT date (EnforcementFlg) — a different signal, with a promulgation-to-
+// enforcement timing lag between them. Switching would silently change what
+// "updated" means for every watched law, so v1 stays the source of truth for
+// discover; see docs/refine/2026-07-06-egov-law-api-v2.md.
 const updateListV1Base = "https://laws.e-gov.go.jp/api/1"
 
 // maxListPages and maxListRefs bound one ListLaws traversal regardless of what the
@@ -70,41 +78,81 @@ func Permalink(lawID string) string { return "https://laws.e-gov.go.jp/law/" + l
 // law leaving the registry is a genuine ResourceVanished; the full text merely
 // lagging is ContentUnavailable (no event, re-poll soon). See ADR-000011.
 func (g *Gateway) Fetch(ctx context.Context, w port.Watch) (port.FetchResult, error) {
+	res, notFound, err := g.fetchLawData(ctx, w.SourceLocalKey)
+	if err != nil {
+		return port.FetchResult{}, err
+	}
+	if notFound {
+		return g.absenceOrPending(ctx, w.SourceLocalKey)
+	}
+	res.Permalink = Permalink(w.SourceLocalKey)
+	return res, nil
+}
+
+// FetchRevision fetches one historical revision's byte-exact 法令標準XML by
+// revision_id — v2 accepts a law_revision_id directly in the law_data path
+// (law_id_or_num_or_revision_id). Used only by the gap-recovery path
+// (usecase/collect.EgovCollector.RecoverRevisions), never by the recurring poll.
+//
+// A 404/empty body here is a reportable gap — that specific historical snapshot
+// is missing from e-Gov — and must NOT be resolved through absenceOrPending:
+// that oracle answers "does the LAW still exist", which is irrelevant to
+// whether one already-enumerated past revision is retrievable. The caller must
+// treat FetchResult.Present==false as a gap to report, never a vanish.
+func (g *Gateway) FetchRevision(ctx context.Context, revisionID string) (port.FetchResult, error) {
+	res, notFound, err := g.fetchLawData(ctx, revisionID)
+	if err != nil {
+		return port.FetchResult{}, err
+	}
+	if notFound {
+		return port.FetchResult{Present: false}, nil
+	}
+	res.Permalink = Permalink(lawIDFromRevisionID(revisionID))
+	return res, nil
+}
+
+// fetchLawData GETs law_data/{id} — id is either a law_id (Fetch) or a
+// law_revision_id (FetchRevision); v2 accepts both in the same path slot — and
+// returns the C14N-canonicalized, compressed snapshot on success. notFound
+// covers both a raw 404 and a 200 with an empty law_full_text (e-Gov's
+// "not published yet" shape); it is intentionally uninterpreted here since
+// Fetch and FetchRevision resolve it against different oracles.
+func (g *Gateway) fetchLawData(ctx context.Context, id string) (result port.FetchResult, notFound bool, err error) {
 	q := url.Values{}
 	q.Set("law_full_text_format", "xml")
 	q.Set("response_format", "json")
 
-	body, status, err := g.http.Get(ctx, "law_data/"+w.SourceLocalKey, q)
+	body, status, err := g.http.Get(ctx, "law_data/"+id, q)
 	if err != nil {
-		return port.FetchResult{}, err
+		return port.FetchResult{}, false, err
 	}
 	if status == 404 {
-		return g.absenceOrPending(ctx, w.SourceLocalKey)
+		return port.FetchResult{}, true, nil
 	}
 	if status != 200 {
-		return port.FetchResult{}, fmt.Errorf("egov law_data: status %d", status)
+		return port.FetchResult{}, false, fmt.Errorf("egov law_data: status %d", status)
 	}
 
 	var resp lawDataResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return port.FetchResult{}, fmt.Errorf("decode law_data response: %w", err)
+		return port.FetchResult{}, false, fmt.Errorf("decode law_data response: %w", err)
 	}
 	if resp.LawFullText == "" {
-		return g.absenceOrPending(ctx, w.SourceLocalKey)
+		return port.FetchResult{}, true, nil
 	}
 
 	rawXML, err := base64.StdEncoding.DecodeString(strings.TrimSpace(resp.LawFullText))
 	if err != nil {
-		return port.FetchResult{}, fmt.Errorf("decode base64 law_full_text: %w", err)
+		return port.FetchResult{}, false, fmt.Errorf("decode base64 law_full_text: %w", err)
 	}
 	canonical, err := canonicalizeXML(rawXML)
 	if err != nil {
-		return port.FetchResult{}, fmt.Errorf("canonicalize law xml: %w", err)
+		return port.FetchResult{}, false, fmt.Errorf("canonicalize law xml: %w", err)
 	}
 
 	compressed, err := blob.Compress(canonical)
 	if err != nil {
-		return port.FetchResult{}, err
+		return port.FetchResult{}, false, err
 	}
 	snap := &port.Snapshot{
 		ContentHash: obs.SumBytes(canonical),
@@ -117,8 +165,7 @@ func (g *Gateway) Fetch(ctx context.Context, w port.Watch) (port.FetchResult, er
 		Present:           true,
 		Snapshot:          snap,
 		SourcePublishedAt: enforcementDateOf(resp.RevisionInfo.LawRevisionID),
-		Permalink:         Permalink(w.SourceLocalKey),
-	}, nil
+	}, false, nil
 }
 
 // absenceOrPending resolves a missing law_data full text into either a genuine
@@ -232,6 +279,39 @@ func (g *Gateway) ListLaws(ctx context.Context, scope port.ListScope, lawType st
 	}
 }
 
+// ListRevisions enumerates one law's full amendment history via
+// /law_revisions/{law_id} (v2). Gap-recovery only — never a discover signal; see
+// updateListV1Base for why LawLister.ListUpdated stays on v1.
+func (g *Gateway) ListRevisions(ctx context.Context, lawID string) ([]port.LawRevision, error) {
+	q := url.Values{}
+	q.Set("response_format", "json")
+
+	body, status, err := g.http.Get(ctx, "law_revisions/"+lawID, q)
+	if err != nil {
+		return nil, err
+	}
+	if status != 200 {
+		return nil, fmt.Errorf("egov law_revisions %s: status %d", lawID, status)
+	}
+	var resp lawRevisionsResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("decode law_revisions %s: %w", lawID, err)
+	}
+	revisions := make([]port.LawRevision, 0, len(resp.Revisions))
+	for _, e := range resp.Revisions {
+		if e.LawRevisionID == "" {
+			continue
+		}
+		revisions = append(revisions, port.LawRevision{
+			RevisionID:      e.LawRevisionID,
+			EnforcementDate: parseDate(e.AmendmentEnforcementDate),
+			PromulgateDate:  parseDate(e.AmendmentPromulgateDate),
+			AmendmentLawID:  e.AmendmentLawID,
+		})
+	}
+	return revisions, nil
+}
+
 // ListUpdated iterates each date in the scope window and collects the LawIds that
 // were updated and are in force (EnforcementFlg "0"), returning stream refs.
 func (g *Gateway) ListUpdated(ctx context.Context, scope port.ListScope) ([]port.LawRef, error) {
@@ -262,8 +342,9 @@ func (g *Gateway) ListUpdated(ctx context.Context, scope port.ListScope) ([]port
 	return refs, nil
 }
 
-// updatedOn fetches the updated-law list for one date, falling back to the
-// v1-documented path when v2 returns 404.
+// updatedOn fetches the updated-law list for one date. v2 404s on this path (no
+// such endpoint), so this always falls through to the v1-documented path; see
+// updateListV1Base for why that fallback is permanent, not provisional.
 func (g *Gateway) updatedOn(ctx context.Context, d time.Time) ([]string, error) {
 	ymd := d.Format("20060102")
 	body, status, err := g.http.Get(ctx, "updatelawlists/"+ymd, nil)
@@ -364,6 +445,29 @@ func enforcementDateOf(revisionID string) *time.Time {
 		return nil
 	}
 	t, err := time.Parse("20060102", parts[1])
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+// lawIDFromRevisionID extracts the law_id prefix from a law_revision_id of the
+// form {law_id}_{施行日}_{改正法令ID} (mirrors enforcementDateOf's parsing).
+func lawIDFromRevisionID(revisionID string) string {
+	if i := strings.Index(revisionID, "_"); i >= 0 {
+		return revisionID[:i]
+	}
+	return revisionID
+}
+
+// parseDate parses a YYYY-MM-DD date field from /law_revisions, returning nil
+// for a blank or unparseable value rather than erroring — several v2 date
+// fields are blank for not-yet-enforced or repeal-not-applicable revisions.
+func parseDate(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", s)
 	if err != nil {
 		return nil
 	}

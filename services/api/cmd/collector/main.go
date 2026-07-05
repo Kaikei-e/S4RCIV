@@ -7,9 +7,15 @@
 //	collector [--source S] poll-once               one poll+project cycle, then exit
 //	collector [--source S] reproject               truncate read models and replay from seq 0
 //	collector [--source S] discover --from --until seed the watch list from the source listing
+//	collector --source egov-law recover-revisions --law-id ID
+//	                                               fetch any of ID's revisions missed by the
+//	                                               recurring poll (v2 law_revisions gap-recovery)
 //
 // For egov-law, discover also accepts --law-type and --updated (use 更新法令一覧),
 // and a cycle additionally runs the differ usecase (interpretation.change).
+// recover-revisions is egov-law only, invoked explicitly (never part of
+// run/poll-once/discover), since gaps are rare and recovering them multiplies
+// requests per law — see egovPipeline.recoverRevisions.
 package main
 
 import (
@@ -113,6 +119,14 @@ type pipeline interface {
 	autoDiscover(ctx context.Context)
 }
 
+// revisionRecoverer is an optional pipeline capability (egov-law only): gap-
+// recovery of missed law revisions via v2 law_revisions + law_data/{revision_id}.
+// Not part of the pipeline interface itself since it has no meaning for sources
+// without a per-resource revision history (kokkai, rosters, sangiin votes).
+type revisionRecoverer interface {
+	recoverRevisions(ctx context.Context, args []string)
+}
+
 func main() {
 	fs := flag.NewFlagSet("collector", flag.ExitOnError)
 	source := fs.String("source", "kokkai", "source to operate on (kokkai | egov-law | giin-roster | sangiin-vote | sangiin-roster)")
@@ -168,6 +182,12 @@ func main() {
 		}
 	case "discover":
 		p.discover(ctx, rest[1:])
+	case "recover-revisions":
+		rr, ok := p.(revisionRecoverer)
+		if !ok {
+			log.Fatalf("recover-revisions is not supported for source %q", *source)
+		}
+		rr.recoverRevisions(ctx, rest[1:])
 	default:
 		usage()
 		os.Exit(2)
@@ -175,11 +195,12 @@ func main() {
 }
 
 // commandNeedsEnabledSource reports whether the subcommand contacts the source
-// (run/poll/discover) and therefore must be refused when control.source.enabled
-// is false. reproject only replays recorded observation events, so it is exempt.
+// (run/poll/discover/recover-revisions) and therefore must be refused when
+// control.source.enabled is false. reproject only replays recorded observation
+// events, so it is exempt.
 func commandNeedsEnabledSource(cmd string) bool {
 	switch cmd {
-	case "run", "poll-once", "discover":
+	case "run", "poll-once", "discover", "recover-revisions":
 		return true
 	}
 	return false
@@ -261,7 +282,7 @@ func wire(ctx context.Context, pool *pgxpool.Pool, source string) (pipeline, por
 		}
 		gw := egov.New(httpc)
 		collector := collect.NewEgov(
-			postgres.NewEventLog(pool), gw, control, gw, sys.Clock{}, sys.IDGen{},
+			postgres.NewEventLog(pool), gw, control, gw, gw, gw, sys.Clock{}, sys.IDGen{},
 			collect.Config{FetcherVersion: collectorVersion},
 		)
 		reader := postgres.NewEventReader(pool)
@@ -635,6 +656,25 @@ func (e *egovPipeline) autoDiscover(ctx context.Context) {
 	logDiscover(egov.SourceName, n, err)
 }
 
+// recoverRevisions is deliberately NOT part of run/poll-once/discover/reproject:
+// folding it into the recurring poll would multiply requests by
+// revisions-per-law x watched-law-count for what is a rare gap-recovery event,
+// not steady-state traffic (DISCIPLINE §1). Invoked explicitly, one law at a
+// time, via the recover-revisions subcommand (see revisionRecoverer).
+func (e *egovPipeline) recoverRevisions(ctx context.Context, args []string) {
+	fs := flag.NewFlagSet("recover-revisions", flag.ExitOnError)
+	lawID := fs.String("law-id", "", "e-Gov 法令ID to recover missed revisions for (required)")
+	_ = fs.Parse(args)
+	if *lawID == "" {
+		log.Fatal("recover-revisions requires --law-id")
+	}
+	fetched, missing, err := e.collector.RecoverRevisions(ctx, *lawID)
+	if err != nil {
+		log.Fatalf("recover-revisions %s: %v", *lawID, err)
+	}
+	log.Printf("recover-revisions %s: fetched %d, missing %d", *lawID, fetched, missing)
+}
+
 // ── shared driver ───────────────────────────────────────────────────────────
 
 // runDaemon runs the poll side and the project side as two independent loops
@@ -809,13 +849,16 @@ func runCheckpoint(ctx context.Context, pool *pgxpool.Pool, args []string) {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `usage: collector [--source kokkai|egov-law|giin-roster|sangiin-vote|sangiin-roster] <run|poll-once|reproject|discover|checkpoint>
+	fmt.Fprint(os.Stderr, `usage: collector [--source kokkai|egov-law|giin-roster|sangiin-vote|sangiin-roster] <run|poll-once|reproject|discover|recover-revisions|checkpoint>
 
   run         daemon: poll due watches + project on a loop
   poll-once   one poll+project cycle, then exit
   reproject   truncate read models and replay from seq 0
   discover --from YYYY-MM-DD --until YYYY-MM-DD [--max N]
               egov-law also: [--law-type T] [--updated]
+  recover-revisions --law-id ID
+              egov-law only: fetch any of ID's revisions missed by the
+              recurring poll (v2 law_revisions gap-recovery)
   checkpoint  sign the current log-chain head (idempotent; run periodically)
   checkpoint genkey [name]
               print a fresh Ed25519 keypair: the private skey goes to stdout

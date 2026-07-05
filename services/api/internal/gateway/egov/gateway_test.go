@@ -291,6 +291,112 @@ func TestListUpdatedFiltersByEnforcement(t *testing.T) {
 	}
 }
 
+func TestListRevisions(t *testing.T) {
+	body, _ := json.Marshal(map[string]any{
+		"revisions": []map[string]any{
+			{
+				"law_revision_id":            "415AC0000000057_20240401_506AC0000000010",
+				"amendment_promulgate_date":  "2024-03-01",
+				"amendment_enforcement_date": "2024-04-01",
+				"amendment_law_id":           "506AC0000000010",
+			},
+			{
+				// Blank dates (未施行/repeal-not-applicable revisions) must parse to nil,
+				// not error the whole listing.
+				"law_revision_id": "415AC0000000057_20180401_500AC0000000001",
+			},
+		},
+	})
+	g := New(fakeGetter{bodies: map[string][]byte{"law_revisions": body}})
+	revs, err := g.ListRevisions(context.Background(), "415AC0000000057")
+	if err != nil {
+		t.Fatalf("ListRevisions: %v", err)
+	}
+	if len(revs) != 2 {
+		t.Fatalf("revisions = %d, want 2", len(revs))
+	}
+	if revs[0].RevisionID != "415AC0000000057_20240401_506AC0000000010" {
+		t.Fatalf("revision_id = %q", revs[0].RevisionID)
+	}
+	if revs[0].EnforcementDate == nil || revs[0].EnforcementDate.Format("2006-01-02") != "2024-04-01" {
+		t.Fatalf("enforcement_date = %v", revs[0].EnforcementDate)
+	}
+	if revs[0].PromulgateDate == nil || revs[0].PromulgateDate.Format("2006-01-02") != "2024-03-01" {
+		t.Fatalf("promulgate_date = %v", revs[0].PromulgateDate)
+	}
+	if revs[0].AmendmentLawID != "506AC0000000010" {
+		t.Fatalf("amendment_law_id = %q", revs[0].AmendmentLawID)
+	}
+	if revs[1].EnforcementDate != nil || revs[1].PromulgateDate != nil {
+		t.Fatalf("blank dates must parse to nil: %+v", revs[1])
+	}
+}
+
+func TestFetchRevisionProducesSnapshot(t *testing.T) {
+	g := New(fakeGetter{bodies: map[string][]byte{"law_data": lawDataBody(t)}})
+	r, err := g.FetchRevision(context.Background(), "415AC0000000057_20240401_506AC0000000010")
+	if err != nil {
+		t.Fatalf("FetchRevision: %v", err)
+	}
+	if !r.Present || r.Snapshot == nil {
+		t.Fatal("expected present snapshot")
+	}
+	// Permalink is derived from the law_id prefix of the revision_id, not the
+	// revision_id itself — a revision has no separate permalink.
+	if r.Permalink != "https://laws.e-gov.go.jp/law/415AC0000000057" {
+		t.Fatalf("permalink = %q, want derived from law_id prefix", r.Permalink)
+	}
+}
+
+// A missing historical revision (404, or a 200 with empty law_full_text) is a
+// reportable gap — that specific snapshot is absent from e-Gov — and must NOT
+// be resolved through the law-existence oracle (/laws): unlike Fetch, a 404 here
+// says nothing about whether the LAW itself still exists, so it must never
+// surface as ContentUnavailable (which claims "law confirmed to still exist")
+// or route through absenceOrPending at all.
+func TestFetchRevision_404NotTreatedAsVanish(t *testing.T) {
+	g := New(fakeGetter{}) // no bodies registered -> law_data/{revisionID} 404s
+	r, err := g.FetchRevision(context.Background(), "415AC0000000057_19990401_000AC0000000001")
+	if err != nil {
+		t.Fatalf("FetchRevision: %v", err)
+	}
+	if r.Present {
+		t.Fatal("missing revision must not report Present")
+	}
+	if r.ContentUnavailable {
+		t.Fatal("missing revision is a gap, not ContentUnavailable (that oracle is Fetch-only)")
+	}
+}
+
+// Differ-compatibility regression (services/differ requires no code change for
+// v2): this drives the exact v2 response shape (law_full_text_format=xml +
+// response_format=json => base64 XML) through Fetch -> canonicalizeXML and
+// checks the canonical output preserves the Article/Paragraph/Sentence
+// structure that services/differ/tests/diff_contract.rs's base_law() fixture
+// (and xmlmodel::parse's eId derivation, ADR-000005/000013) depends on. The
+// Rust differ only ever sees these bytes over the transport-agnostic
+// s4rciv.diff.v1.DiffService contract, so proving this Go-side shape is stable
+// is sufficient — no Rust-side test is needed for the v1->v2 migration itself.
+func TestFetchCanonicalXMLPreservesDifferContractStructure(t *testing.T) {
+	g := New(fakeGetter{bodies: map[string][]byte{"law_data": lawDataBody(t)}})
+	r, err := g.Fetch(context.Background(), port.Watch{SourceLocalKey: "415AC0000000057"})
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	raw, err := blob.Decompress(r.Snapshot.Bytes)
+	if err != nil {
+		t.Fatalf("decompress: %v", err)
+	}
+	canonical := string(raw)
+	for _, want := range []string{
+		`Num="1"`, "<ArticleCaption>", "<ArticleTitle>", "<Paragraph", "<Sentence>",
+	} {
+		if !strings.Contains(canonical, want) {
+			t.Fatalf("canonical XML missing %q (differ contract structure not preserved):\n%s", want, canonical)
+		}
+	}
+}
+
 func TestListUpdatedV1Fallback(t *testing.T) {
 	// v2 has no updatelawlists endpoint (404); the v1 fallback serves text/xml:
 	// DataRoot > ApplData > LawNameListInfo[]. This is the live path in production.
