@@ -14,6 +14,13 @@
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	let map: any;
 
+	// Accessible equivalent of the choropleth's click popups (WCAG 1.1.1 / 2.1.1):
+	// the table below reuses this directly, no GeoJSON fetch needed (unlike
+	// DistrictVoteMap, PrefectureTally already carries districtName).
+	const tableRows = $derived(
+		[...prefectures].sort((a, b) => (a.districtName ?? '').localeCompare(b.districtName ?? '', 'ja'))
+	);
+
 	// Popup content as DOM nodes via textContent — never an HTML string. The current
 	// inputs are static GeoJSON, but the same no-innerHTML rule as DistrictVoteMap
 	// applies so a future data source can't introduce HTML injection here.
@@ -122,7 +129,78 @@
 
 <div class="map" bind:this={el} role="img" aria-label="都道府県別の参議院記名投票地図"></div>
 
+<!-- Accessible equivalent of the choropleth's click popups (WCAG 1.1.1 / 2.1.1):
+     the map conveys per-prefecture 賛成/反対内訳 only via mouse click, so the same
+     facts are also available here as a keyboard/screen-reader-navigable table.
+     Collapsed by default (DESIGN_LANGUAGE §9.2 disclosure pattern). -->
+{#if tableRows.length > 0}
+	<details class="alt-table">
+		<summary>都道府県別の一覧を表として表示（{tableRows.length} 件）</summary>
+		<div class="scroll">
+			<table>
+				<thead>
+					<tr>
+						<th scope="col">都道府県</th>
+						<th scope="col">賛成</th>
+						<th scope="col">反対</th>
+						<th scope="col">棄権・欠席</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each tableRows as row (row.districtCode)}
+						<tr>
+							<td>{row.districtName ?? '—'}</td>
+							<td>{row.yes ?? 0}</td>
+							<td>{row.no ?? 0}</td>
+							<td>{row.abstain ?? 0}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	</details>
+{/if}
+
 <style>
+	.alt-table {
+		margin-top: 10px;
+		font-size: 13px;
+	}
+	.alt-table summary {
+		cursor: pointer;
+		color: var(--text-2);
+		padding: 6px 0;
+	}
+	.alt-table summary:hover {
+		color: var(--accent);
+	}
+	.scroll {
+		overflow-x: auto;
+		max-height: 400px;
+		overflow-y: auto;
+		border: 1px solid var(--hairline-2);
+		border-radius: var(--r-sm);
+		margin-top: 6px;
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+	}
+	th,
+	td {
+		text-align: left;
+		padding: 6px 10px;
+		white-space: nowrap;
+		border-bottom: 1px solid var(--hairline);
+	}
+	th {
+		position: sticky;
+		top: 0;
+		background: var(--surface-2);
+		color: var(--text-3);
+		font-weight: 600;
+		font-size: 12px;
+	}
 	.map {
 		width: 100%;
 		/* Shorter on phones so the map never fills the viewport (§9.4). */

@@ -17,6 +17,29 @@
 
 	const OPT_JA: Record<string, string> = { yes: '賛成', no: '反対', abstain: '棄権' };
 
+	// district_code (== GeoJSON kucode) → the sitting member's recorded vote.
+	// Shared by the map fill/popups and the accessible table below (WCAG 1.1.1 /
+	// 2.1.1 — the choropleth's per-district facts must not be mouse-only).
+	const byDistrict = $derived.by(() => {
+		const m = new Map<number, Vote>();
+		for (const v of votes) {
+			if (!v.isPr && v.districtCode) m.set(Number(v.districtCode), v);
+		}
+		return m;
+	});
+
+	// kucode → district display name. Only the basemap GeoJSON carries names (the
+	// API's Vote records don't), so it is fetched directly here — independent of
+	// MapLibre's own internal fetch/render state — so the table below is complete
+	// even before/without the map having rendered those features.
+	let districtNames = $state<Map<number, string>>(new Map());
+
+	const tableRows = $derived(
+		[...districtNames.entries()]
+			.map(([kucode, name]) => ({ kucode, name, vote: byDistrict.get(kucode) }))
+			.sort((a, b) => a.kucode - b.kucode)
+	);
+
 	// Popup content as DOM nodes via textContent — never an HTML string. Member /
 	// district names are upstream-derived, so they must not reach innerHTML (XSS).
 	function popupContent(title: string, lines: string[]): HTMLElement {
@@ -49,12 +72,18 @@
 	}
 
 	onMount(async () => {
-		// district_code (== GeoJSON kucode) → the sitting member's recorded vote.
-		// Built here (page data is static), so it reads the props inside the closure.
-		const byDistrict = new Map<number, Vote>();
-		for (const v of votes) {
-			if (!v.isPr && v.districtCode) byDistrict.set(Number(v.districtCode), v);
-		}
+		fetch('/geo/senkyoku289.geojson')
+			.then((r) => r.json())
+			.then((geo) => {
+				const m = new Map<number, string>();
+				for (const f of geo.features ?? []) {
+					const kucode = f.properties?.kucode;
+					const kuname = f.properties?.kuname;
+					if (kucode != null && kuname) m.set(Number(kucode), String(kuname));
+				}
+				districtNames = m;
+			})
+			.catch(() => {}); // the table degrades to empty; the map itself is unaffected
 
 		const maplibregl = (await import('maplibre-gl')).default;
 		await import('maplibre-gl/dist/maplibre-gl.css');
@@ -131,7 +160,94 @@
 
 <div class="map" bind:this={el} role="img" aria-label="選挙区別の記名投票地図"></div>
 
+<!-- Accessible equivalent of the choropleth's click popups (WCAG 1.1.1 / 2.1.1):
+     the map conveys district → member → vote only via mouse hover/click, so the
+     same facts are also available here as a keyboard/screen-reader-navigable
+     table. Collapsed by default (DESIGN_LANGUAGE §9.2 disclosure pattern) since
+     289 rows would otherwise dominate the page. -->
+{#if tableRows.length > 0}
+	<details class="alt-table">
+		<summary>選挙区別の一覧を表として表示（{tableRows.length} 区）</summary>
+		<div class="scroll">
+			<table>
+				<thead>
+					<tr>
+						<th scope="col">選挙区</th>
+						<th scope="col">議員</th>
+						<th scope="col">会派</th>
+						<th scope="col">投票</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each tableRows as row (row.kucode)}
+						<tr>
+							<td>{row.name}</td>
+							<td>{row.vote?.voterName ?? '—'}</td>
+							<td>{row.vote?.parliamentaryGroup ?? '—'}</td>
+							<td class="opt-{row.vote?.option ?? 'none'}"
+								>{row.vote ? (OPT_JA[row.vote.option ?? ''] ?? '—') : '記録なし'}</td
+							>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	</details>
+{/if}
+
 <style>
+	.alt-table {
+		margin-top: 10px;
+		font-size: 13px;
+	}
+	.alt-table summary {
+		cursor: pointer;
+		color: var(--text-2);
+		padding: 6px 0;
+	}
+	.alt-table summary:hover {
+		color: var(--accent);
+	}
+	.scroll {
+		overflow-x: auto;
+		max-height: 400px;
+		overflow-y: auto;
+		border: 1px solid var(--hairline-2);
+		border-radius: var(--r-sm);
+		margin-top: 6px;
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+	}
+	th,
+	td {
+		text-align: left;
+		padding: 6px 10px;
+		white-space: nowrap;
+		border-bottom: 1px solid var(--hairline);
+	}
+	th {
+		position: sticky;
+		top: 0;
+		background: var(--surface-2);
+		color: var(--text-3);
+		font-weight: 600;
+		font-size: 12px;
+	}
+	/* Factual category colours, keyed to the map fill (DESIGN_LANGUAGE §6). */
+	.opt-yes {
+		color: var(--dv-1);
+	}
+	.opt-no {
+		color: var(--dv-2);
+	}
+	.opt-abstain {
+		color: var(--dv-4);
+	}
+	.opt-none {
+		color: var(--text-3);
+	}
 	.map {
 		width: 100%;
 		/* Shorter on phones so the map never fills the viewport (§9.4). */
