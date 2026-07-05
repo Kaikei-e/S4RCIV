@@ -22,10 +22,17 @@
 	import favicon from '$lib/assets/favicon.png';
 	import Masthead from '$lib/components/Masthead.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	import type { LayoutData } from './$types';
 
 	let { children, data }: { children: Snippet; data: LayoutData } = $props();
+
+	// Absolute canonical URL for every page (SEO: dedupes ?query-carrying variants
+	// of the same page, e.g. the filtered timeline). Forced https: regardless of
+	// what scheme SvelteKit inferred internally behind the Cloudflare Tunnel —
+	// this is an https-only public site, so there is no legitimate http canonical.
+	const canonicalHref = $derived(`https://${page.url.host}${page.url.pathname}`);
 
 	// Map the masthead provenance into the component's props. Coverage is always real
 	// (control.watch count); the checkpoint lights up only once the generator (ADR-000019)
@@ -45,6 +52,11 @@
 
 <svelte:head>
 	<link rel="icon" type="image/png" href={favicon} />
+	<link rel="canonical" href={canonicalHref} />
+	<meta property="og:site_name" content="S4RCIV" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content={canonicalHref} />
+	<meta name="twitter:card" content="summary" />
 </svelte:head>
 
 <a class="skip" href="#main">本文へスキップ</a>
