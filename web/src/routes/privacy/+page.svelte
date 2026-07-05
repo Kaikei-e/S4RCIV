@@ -6,13 +6,13 @@
 	<title>プライバシーポリシー — S4RCIV</title>
 	<meta
 		name="description"
-		content="S4RCIV のプライバシーポリシー。取得する情報、利用目的、Cloudflare によるアクセス解析と配信、開示等請求の窓口。"
+		content="S4RCIV のプライバシーポリシー。取得する情報、利用目的、Cloudflare による配信・通信保護、開示等請求の窓口。"
 	/>
 </svelte:head>
 
 <DocPage
 	title="プライバシーポリシー"
-	updated="2026-06-06"
+	updated="2026-07-06"
 	lead="本サービスにおける情報の取扱いを説明します。本サービスはログイン・会員登録・送信フォームを持たない、受動・読取専用のサービスです。"
 >
 	<h2>1. 事業者情報</h2>
@@ -45,18 +45,11 @@
 		<li>お問い合わせ・ご請求への対応</li>
 	</ul>
 
-	<h2>4. アクセス解析（Cloudflare Web Analytics）</h2>
+	<h2>4. アクセス解析</h2>
 	<p>
-		本サービスは、利用状況を把握し改善するため、Cloudflare, Inc.（米国）が提供する「Cloudflare Web
-		Analytics」を利用しています。Cloudflare Web Analytics は、Cloudflare 社の公表によれば、<strong
-			>Cookie や localStorage 等の端末内識別子を使用せず、IP アドレスやユーザーエージェント等による個人のフィンガープリント（追跡）も行いません</strong
-		>。本サービスは、特定の個人を識別する目的で解析データを利用しません。
-	</p>
-	<p>
-		そのため、アクセス解析にあたり、利用者の同意取得や Cookie 同意バナーの表示は行っていません。詳細は <a
-			href="https://www.cloudflare.com/web-analytics/"
-			rel="external">Cloudflare Web Analytics</a
-		> の説明をご参照ください。
+		本サービスは、現時点で第三者のアクセス解析ツール（Cloudflare Web Analytics を含む）を導入していません。ページの
+		Content-Security-Policy は自ドメイン以外のスクリプト読み込みを技術的に禁止しており、第三者スクリプトによる解析・追跡は行われません。将来アクセス解析を導入する場合は、本ポリシーおよび
+		CSP をあわせて更新したうえで、導入後に反映します。
 	</p>
 
 	<h2>5. コンテンツ配信・通信の保護（Cloudflare）と外国にある第三者への提供</h2>
