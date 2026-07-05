@@ -4,8 +4,12 @@
    tone (calm), and density (regular) are baked in, not switchable (ADR-000020). Fonts are
    self-hosted and wired in routes/+layout.svelte (§11). */
 
-:root,
-[data-theme='dark'] {
+:root {
+	/* Base/default values below are dark (ADR-000020 §6: [data-theme] is the one
+	   runtime-switchable axis). When no [data-theme] override is present, the
+	   prefers-color-scheme block further down swaps these for the light set to
+	   follow the OS/browser preference instead of forcing dark on everyone. */
+
 	/* surfaces — hierarchy by lightness, never shadow */
 	--canvas: #0a0d12;
 	--surface-1: #0f141b; /* panel */
@@ -99,6 +103,94 @@
 	--panel-pad: 20px;
 }
 
+/* Follows the OS/browser preference when no [data-theme] override is present.
+   Same specificity as :root above, so later-in-file wins when it matches — the
+   explicit [data-theme='dark']/[data-theme='light'] overrides below come after
+   this block, so an explicit override always wins over the OS preference.
+   Values must be kept identical to [data-theme='light'] below (no preprocessor
+   here to share them across both selectors). */
+@media (prefers-color-scheme: light) {
+	:root {
+		--canvas: #eaedf1;
+		--surface-1: #ffffff;
+		--surface-2: #f4f6f9;
+		--surface-3: #eef1f5;
+		--surface-inset: #f6f8fa;
+		--surface-raise: #ffffff;
+		--hairline: rgba(16, 24, 33, 0.09);
+		--hairline-2: rgba(16, 24, 33, 0.16);
+		--hairline-3: rgba(16, 24, 33, 0.28);
+		--text-1: #16202c;
+		--text-2: #3f4d60;
+		--text-3: #5c6b7e;
+		--text-faint: #8593a4;
+		--accent: #0c7fa3;
+		--accent-2: #095f7c;
+		--accent-weak: rgba(12, 127, 163, 0.1);
+		--accent-line: rgba(12, 127, 163, 0.34);
+		--focus: #0c7fa3;
+		--on-accent: #ffffff;
+		--st-nominal: #1f8e68;
+		--st-nominal-t: #176e51;
+		--st-info: #2470bf;
+		--st-info-t: #1b5596;
+		--st-changed: #a9741c;
+		--st-changed-t: #855a12;
+		--st-caution: #a85a1d;
+		--st-caution-t: #864614;
+		--st-critical: #bf4540;
+		--st-critical-t: #973330;
+		--dv-1: #2470bf;
+		--dv-2: #a9741c;
+		--dv-3: #138468;
+		--dv-4: #8a4fb0;
+		--dv-5: #c0413d;
+		--dv-6: #4e8a1e;
+	}
+}
+
+/* Explicit overrides for a future manual toggle (ADR-000020 §6). Declared after
+   the prefers-color-scheme block so an explicit choice always wins over the OS
+   preference regardless of media-query match. */
+[data-theme='dark'] {
+	--canvas: #0a0d12;
+	--surface-1: #0f141b;
+	--surface-2: #161d26;
+	--surface-3: #1e2732;
+	--surface-inset: #0b0f15;
+	--surface-raise: #232e3a;
+	--hairline: rgba(182, 202, 228, 0.07);
+	--hairline-2: rgba(182, 202, 228, 0.14);
+	--hairline-3: rgba(182, 202, 228, 0.24);
+	--text-1: #e9edf4;
+	--text-2: #abb6c7;
+	--text-3: #7d8799;
+	--text-faint: #5a6473;
+	--accent: #5fb6ce;
+	--accent-2: #8fcfe2;
+	--accent-weak: rgba(95, 182, 206, 0.12);
+	--accent-line: rgba(95, 182, 206, 0.34);
+	--focus: #8fd6ea;
+	--on-accent: #04222c;
+	--st-nominal: #4fa98a;
+	--st-nominal-t: #77c8a9;
+	--st-info: #5e97c9;
+	--st-info-t: #92bbdf;
+	--st-changed: #d2a24f;
+	--st-changed-t: #e7c483;
+	--st-caution: #d0814a;
+	--st-caution-t: #e7a877;
+	--st-critical: #cc6b66;
+	--st-critical-t: #e69089;
+	--dv-1: #5e97c9;
+	--dv-2: #d2a24f;
+	--dv-3: #4fb295;
+	--dv-4: #b487c9;
+	--dv-5: #d4796d;
+	--dv-6: #93c061;
+	color-scheme: dark;
+}
+
 [data-theme='light'] {
 	--canvas: #eaedf1;
 	--surface-1: #ffffff;
@@ -135,6 +227,7 @@
 	--dv-4: #8a4fb0;
 	--dv-5: #c0413d;
 	--dv-6: #4e8a1e;
+	color-scheme: light;
 }
 
 *,
@@ -144,7 +237,12 @@
 }
 
 html {
-	color-scheme: dark;
+	/* No [data-theme] override + prefers-color-scheme: dark (or no preference
+	   expressed) falls through to the :root dark defaults above; light is used
+	   only when the OS prefers it (media block) or an explicit override says so.
+	   color-scheme here matches: browser chrome (scrollbars, form controls)
+	   follows the same OS preference unless an override sets it explicitly. */
+	color-scheme: light dark;
 	/* breathing room above an anchored 条/発言 when jumping from the outline. */
 	scroll-padding-top: var(--s4);
 }
