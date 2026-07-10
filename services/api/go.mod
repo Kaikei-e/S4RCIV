@@ -11,7 +11,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/temoto/robotstxt v1.1.2
 	github.com/ucarion/c14n v0.1.0
-	golang.org/x/mod v0.37.0
+	golang.org/x/mod v0.38.0
 	golang.org/x/net v0.56.0
 	golang.org/x/text v0.38.0
 	google.golang.org/protobuf v1.36.11
