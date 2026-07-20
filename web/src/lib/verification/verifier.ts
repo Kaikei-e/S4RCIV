@@ -20,18 +20,22 @@
 // here is the bounded check of ADR-000014 §3: (1) each log_hash recomputes,
 // (2) the stream's content chain is continuous, (3) coverage by a checkpoint.
 
-import { HashableEvent } from '$lib/gen/s4rciv/observation/v1/observation_pb';
+import { fromJson, toBinary } from '@bufbuild/protobuf';
+import {
+	HashableEventSchema,
+	type HashableEvent
+} from '$lib/gen/s4rciv/observation/v1/observation_pb';
 
 const GENESIS_LOG_PREV = '0'.repeat(64);
 
 // ── Wire shape of the GetStreamVerification response, as the SvelteKit load hands
-// it to the browser (proto3 JSON via Message.toJson: camelCase, int64 → string,
+// it to the browser (proto3 JSON via toJson: camelCase, int64 → string,
 // enum → name). `hashable` is the HashableEvent JSON; we re-parse it through the
-// generated message so the bytes we re-marshal are exactly the canonical form. ──
+// generated schema so the bytes we re-marshal are exactly the canonical form. ──
 
 export interface VerifiableEventJson {
 	seq: string;
-	hashable: unknown; // HashableEvent proto-JSON; validated via HashableEvent.fromJson
+	hashable: unknown; // HashableEvent proto-JSON; validated via fromJson(HashableEventSchema, …)
 	logHash: string; // stored log_hash, lowercase hex
 }
 
@@ -105,12 +109,12 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
  * omits zero/empty values — identical to Go for this scalar-only schema.
  */
 export function hashableBytes(he: HashableEvent): Uint8Array {
-	return he.toBinary();
+	return toBinary(HashableEventSchema, he);
 }
 
 /** Recompute log_hash from a HashableEvent's proto-JSON (the RPC payload form). */
 export async function recomputeLogHash(hashableJson: unknown): Promise<string> {
-	const he = HashableEvent.fromJson(hashableJson as never);
+	const he = fromJson(HashableEventSchema, hashableJson as never);
 	return sha256Hex(hashableBytes(he));
 }
 
@@ -129,7 +133,7 @@ export async function verifyStream(
 	let lastContentHash = '';
 
 	for (const ev of events) {
-		const he = HashableEvent.fromJson(ev.hashable as never);
+		const he = fromJson(HashableEventSchema, ev.hashable as never);
 		const recomputed = await sha256Hex(hashableBytes(he));
 		const logHashOk = recomputed === ev.logHash;
 

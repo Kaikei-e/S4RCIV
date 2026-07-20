@@ -4,7 +4,8 @@
 		type StreamVerificationJson,
 		type StreamVerificationResult
 	} from '$lib/verification/verifier';
-	import { HashableEvent } from '$lib/gen/s4rciv/observation/v1/observation_pb';
+	import { fromJson } from '@bufbuild/protobuf';
+	import { HashableEventSchema } from '$lib/gen/s4rciv/observation/v1/observation_pb';
 	import { toJstMinute } from '$lib/time';
 
 	interface Props {
@@ -47,7 +48,7 @@
 			let type = 1;
 			let observedAt = '';
 			try {
-				const he = HashableEvent.fromJson(e.hashable as never);
+				const he = fromJson(HashableEventSchema, e.hashable as never);
 				type = he.type;
 				observedAt = he.observedAt;
 			} catch {

@@ -13,11 +13,7 @@
 version: v2
 clean: true
 plugins:
-  - remote: buf.build/bufbuild/es:v1.10.0
-    out: src/lib/gen
-    opt:
-      - target=ts
-  - remote: buf.build/connectrpc/es:v1.6.1
+  - remote: buf.build/bufbuild/es:v2.2.2
     out: src/lib/gen
     opt:
       - target=ts

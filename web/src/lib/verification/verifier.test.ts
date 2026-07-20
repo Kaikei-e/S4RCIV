@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { toJson } from '@bufbuild/protobuf';
+import { HashableEventSchema } from '$lib/gen/s4rciv/observation/v1/observation_pb';
 import { loadGolden, buildHashable, type GoldenVector } from './golden.fixture';
 import { verifyStream, type VerifiableEventJson, type StreamVerificationJson } from './verifier';
 
@@ -7,7 +9,7 @@ import { verifyStream, type VerifiableEventJson, type StreamVerificationJson } f
 function event(v: GoldenVector): VerifiableEventJson {
 	return {
 		seq: v.fields.streamSeq,
-		hashable: buildHashable(v.fields).toJson(),
+		hashable: toJson(HashableEventSchema, buildHashable(v.fields)),
 		logHash: v.logHashHex
 	};
 }

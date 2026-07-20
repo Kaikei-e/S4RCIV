@@ -26,7 +26,7 @@ SECRET_FILE="secrets/api_db_password.txt"
 # The secret is owned by uid 65532 (the api container user) with mode 600, so
 # read it through a root-in-namespace container instead of the host user.
 PW="$(docker run --rm -v "$PWD/secrets:/s:ro" \
-  postgres:18.4-trixie@sha256:8ff36f3c66371cba71d20ceedccfc3de9669a68737607888c4ef0af93abe8e39 \
+  postgres:18.4-trixie@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a \
   sh -c "tr -d '\n' < /s/$(basename "$SECRET_FILE")")"
 if [ -z "$PW" ]; then
   echo "error: $SECRET_FILE is missing or empty" >&2

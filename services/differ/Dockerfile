@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Builder is Debian 12 (bookworm) to match the glibc of the distroless runtime.
-FROM rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1 AS build
+FROM rust:1.97.1-bookworm@sha256:77fac8b98f9f46062bb680b6d25d5bcaabfc400143952ebc572e924bcbedc3fa AS build
 # protoc is required by build.rs (prost-build invokes it to compile the proto).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends protobuf-compiler \
@@ -19,7 +19,7 @@ FROM build AS test
 COPY tests ./tests
 CMD ["cargo", "test", "--all"]
 
-FROM gcr.io/distroless/cc-debian12:nonroot@sha256:bd2899c12b335c827750ccf2359879eab09c09b206023dcebea408947d54127c
+FROM gcr.io/distroless/cc-debian12:nonroot@sha256:66aa873a4a14fb164aa01296058efd8253744606d72715e45acface073359faa
 COPY --from=build /differ /app/differ
 # The Connect-RPC server binds 0.0.0.0:$DIFFER_PORT (default 9090).
 EXPOSE 9090

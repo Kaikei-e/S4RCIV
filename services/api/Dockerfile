@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.26-trixie@sha256:0dcba0d95dbfb072e9917a106b9e07d7cc298097dc83e9307056ef1889de654d AS build
+FROM golang:1.26-trixie@sha256:117e07f49461abb984fc8aef661432461ff43d06faa22c3b73af6a49ce325cb9 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -17,7 +17,7 @@ ENV CGO_ENABLED=1 MIGRATIONS_DIR=/migrations
 CMD ["go", "test", "./..."]
 
 # Query side (read-only Connect-RPC server).
-FROM gcr.io/distroless/static-debian12:nonroot@sha256:d093aa3e30dbadd3efe1310db061a14da60299baff8450a17fe0ccc514a16639 AS api
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:aef9602f8710ec12bde19d593fed1f76c708531bb7aba205110f1029786ead7b AS api
 WORKDIR /app
 COPY --from=build /out/api /app/api
 EXPOSE 8080
@@ -25,7 +25,7 @@ USER nonroot:nonroot
 ENTRYPOINT ["/app/api"]
 
 # Command side (collector: discover / poll / project).
-FROM gcr.io/distroless/static-debian12:nonroot@sha256:d093aa3e30dbadd3efe1310db061a14da60299baff8450a17fe0ccc514a16639 AS collector
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:aef9602f8710ec12bde19d593fed1f76c708531bb7aba205110f1029786ead7b AS collector
 WORKDIR /app
 COPY --from=build /out/collector /app/collector
 USER nonroot:nonroot

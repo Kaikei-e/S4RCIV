@@ -5,8 +5,11 @@
 // JSON directly (Vite/Vitest resolve it; resolveJsonModule typechecks it) so this
 // stays free of node:* APIs and the app type-check needs no @types/node.
 
-import { protoInt64 } from '@bufbuild/protobuf';
-import { HashableEvent } from '$lib/gen/s4rciv/observation/v1/observation_pb';
+import { create } from '@bufbuild/protobuf';
+import {
+	HashableEventSchema,
+	type HashableEvent
+} from '$lib/gen/s4rciv/observation/v1/observation_pb';
 import goldenJson from '../../../../services/api/internal/domain/observation/testdata/hashable_golden.json';
 
 export interface GoldenFields {
@@ -44,14 +47,14 @@ export function loadGolden(): GoldenFile {
 
 /**
  * Build a HashableEvent from golden field values. stream_seq goes through
- * protoInt64.parse so values beyond 2^53 stay exact (a plain JS number would
- * silently round — the trap the research flagged).
+ * BigInt so values beyond 2^53 stay exact (a plain JS number would silently
+ * round — the trap the research flagged).
  */
 export function buildHashable(f: GoldenFields): HashableEvent {
-	return new HashableEvent({
+	return create(HashableEventSchema, {
 		eventId: f.eventId,
 		streamId: f.streamId,
-		streamSeq: protoInt64.parse(f.streamSeq),
+		streamSeq: BigInt(f.streamSeq),
 		type: f.type,
 		source: f.source,
 		fetcherVersion: f.fetcherVersion,

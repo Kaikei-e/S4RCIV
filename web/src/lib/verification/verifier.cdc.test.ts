@@ -9,6 +9,8 @@
 // scalar-only invariant forbids precisely because it breaks portability).
 
 import { describe, it, expect } from 'vitest';
+import { toBinary } from '@bufbuild/protobuf';
+import { HashableEventSchema } from '$lib/gen/s4rciv/observation/v1/observation_pb';
 import { loadGolden, buildHashable } from './golden.fixture';
 import { toHex, sha256Hex } from './verifier';
 
@@ -23,12 +25,12 @@ describe('CDC: HashableEvent byte-identity with Go (proto-linked-v1)', () => {
 	for (const v of golden.vectors) {
 		it(`reproduces Deterministic wire bytes for "${v.name}"`, () => {
 			const he = buildHashable(v.fields);
-			expect(toHex(he.toBinary())).toBe(v.wireHex);
+			expect(toHex(toBinary(HashableEventSchema, he))).toBe(v.wireHex);
 		});
 
 		it(`reproduces log_hash for "${v.name}"`, async () => {
 			const he = buildHashable(v.fields);
-			expect(await sha256Hex(he.toBinary())).toBe(v.logHashHex);
+			expect(await sha256Hex(toBinary(HashableEventSchema, he))).toBe(v.logHashHex);
 		});
 	}
 
@@ -39,13 +41,13 @@ describe('CDC: HashableEvent byte-identity with Go (proto-linked-v1)', () => {
 		expect(zero.fields.type).toBe(0);
 		// The definitive omission proof: rebuilding from these zero values and
 		// re-marshaling reproduces the Go bytes, which themselves omitted the fields.
-		expect(toHex(buildHashable(zero.fields).toBinary())).toBe(zero.wireHex);
+		expect(toHex(toBinary(HashableEventSchema, buildHashable(zero.fields)))).toBe(zero.wireHex);
 	});
 
 	it('keeps stream_seq beyond 2^53 exact (BigInt, not JS number)', () => {
 		const big = golden.vectors.find((v) => v.name === 'large_stream_seq_beyond_js_safe_int');
 		if (!big) throw new Error('large stream_seq vector missing from golden');
 		expect(big.fields.streamSeq).toBe('9007199254740993');
-		expect(toHex(buildHashable(big.fields).toBinary())).toBe(big.wireHex);
+		expect(toHex(toBinary(HashableEventSchema, buildHashable(big.fields)))).toBe(big.wireHex);
 	});
 });

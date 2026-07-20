@@ -31,6 +31,7 @@ compose.tunnel.yaml
 .DS_Store
 *.log
 web/.pnpm-store/
+/.pnpm-store/
 
 # Local DB dumps (scripts/backup-db.sh) — the ground truth lives in Postgres;
 # dumps are an operator-local recovery artifact, never repo content.

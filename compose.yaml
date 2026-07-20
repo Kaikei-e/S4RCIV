@@ -21,7 +21,7 @@ x-logging: &default-logging
 
 services:
   db:
-    image: postgres:18.4-trixie@sha256:8ff36f3c66371cba71d20ceedccfc3de9669a68737607888c4ef0af93abe8e39
+    image: postgres:18.4-trixie@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_DB: ${POSTGRES_DB}
@@ -63,7 +63,7 @@ services:
     logging: *default-logging
 
   migrate:
-    image: arigaio/atlas:1.2.1-alpine@sha256:2cbaaa3c0415d2fbb21399bad15329bb5f60db2f9d04f265aec51abfdfcf8748
+    image: arigaio/atlas:1.2.3-alpine@sha256:7de644d8801a27160431c560e4fa3f1cf4066e34e46d87b2df7e44a83f3d6266
     depends_on:
       db:
         condition: service_healthy
