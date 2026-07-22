@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:25-trixie-slim@sha256:aabbe39553d15ede8a97cc60c9e1a97034ff772afcf696ea42b94e7f5f2ec71b AS build
+FROM node:26-trixie-slim@sha256:715e55e4b84e4bb0ff48e49b398a848f08e55daed8eb6a0ea1839ae53bc57583 AS build
 # Node 25+ official images no longer ship Corepack; install the packageManager pin directly.
 RUN npm install -g pnpm@11.15.1
 WORKDIR /app
@@ -16,7 +16,7 @@ CMD ["pnpm", "test"]
 
 # adapter-node bundles a self-contained server into build/, so the runtime
 # image needs no node_modules.
-FROM node:25-trixie-slim@sha256:aabbe39553d15ede8a97cc60c9e1a97034ff772afcf696ea42b94e7f5f2ec71b AS runtime
+FROM node:26-trixie-slim@sha256:715e55e4b84e4bb0ff48e49b398a848f08e55daed8eb6a0ea1839ae53bc57583 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/build ./build
