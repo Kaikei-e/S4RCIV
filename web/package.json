@@ -42,6 +42,6 @@
     "@bufbuild/protobuf": "^2.12.1",
     "@connectrpc/connect": "^2.1.2",
     "@connectrpc/connect-node": "^2.1.2",
-    "maplibre-gl": "^5.24.0"
+    "maplibre-gl": "^6.0.0"
   }
 }
