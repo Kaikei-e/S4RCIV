@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Builder is Debian 12 (bookworm) to match the glibc of the distroless runtime.
-FROM rust:1.97.1-bookworm@sha256:77fac8b98f9f46062bb680b6d25d5bcaabfc400143952ebc572e924bcbedc3fa AS build
+FROM rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97 AS build
 # protoc is required by build.rs (prost-build invokes it to compile the proto).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends protobuf-compiler \
