@@ -159,19 +159,17 @@ pub fn parse(xml: &[u8]) -> Result<ParsedLaw, ParseError> {
                 builder.on_end(&name);
             }
             Ok(Event::Text(e)) => {
-                // quick-xml 0.40 emits entity references as separate GeneralRef
-                // events, so Text content here is already plain decoded text.
-                let text = match e.decode() {
-                    Ok(c) => c.into_owned(),
-                    Err(_) => String::from_utf8_lossy(e.as_ref()).into_owned(),
-                };
-                builder.on_text(&text);
+                // quick-xml emits entity references as separate GeneralRef events,
+                // so Text content here is already plain text. Since 0.42 events
+                // carry `str`, and the reader has already validated UTF-8.
+                let text: &str = &e;
+                builder.on_text(text);
             }
             Ok(Event::GeneralRef(r)) => {
                 // Resolve the five predefined XML entities; anything else is passed
                 // through verbatim so we never drop normative characters.
-                let raw = String::from_utf8_lossy(r.as_ref());
-                let resolved = match raw.as_ref() {
+                let raw: &str = &r;
+                let resolved = match raw {
                     "amp" => "&",
                     "lt" => "<",
                     "gt" => ">",
@@ -199,11 +197,10 @@ pub fn parse(xml: &[u8]) -> Result<ParsedLaw, ParseError> {
 }
 
 /// Strip an XML namespace prefix, returning the local element name.
-fn local_name(raw: &[u8]) -> String {
-    let name = String::from_utf8_lossy(raw);
-    match name.rsplit_once(':') {
+fn local_name(raw: &str) -> String {
+    match raw.rsplit_once(':') {
         Some((_, local)) => local.to_string(),
-        None => name.into_owned(),
+        None => raw.to_string(),
     }
 }
 
@@ -221,8 +218,8 @@ fn decode_char_ref(body: &str) -> Option<String> {
 /// Read the `Num` attribute off a start tag, if present.
 fn num_attr(e: &BytesStart<'_>) -> Option<String> {
     for attr in e.attributes().flatten() {
-        if attr.key.as_ref() == b"Num" {
-            return Some(String::from_utf8_lossy(&attr.value).into_owned());
+        if attr.key.as_ref() == "Num" {
+            return Some(attr.value.into_owned());
         }
     }
     None

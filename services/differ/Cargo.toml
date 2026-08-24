@@ -2,7 +2,7 @@
 name = "differ"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.98"
 
 [lib]
 name = "differ"
@@ -18,7 +18,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal
 # Already in the tree via axum; the direct dep only enables the `limit` feature.
 tower = { version = "0.5", features = ["limit"] }
 prost = "0.14"
-quick-xml = "0.41"
+quick-xml = "0.42"
 bytes = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
