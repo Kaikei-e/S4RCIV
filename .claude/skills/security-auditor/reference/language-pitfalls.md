@@ -6,15 +6,15 @@ s4rCiv のスタックに合わせた言語別の危険パターン集。各項�
 公式 URL は項目末に添える。
 
 ## Contents
-- Go 1.26+
-- Rust 1.94+
+- Go 1.27+
+- Rust 1.98+
 - Python 3.14+
 - TypeScript / Svelte / Bun
 - Deno 2.x
 
 ---
 
-## Go 1.26+
+## Go 1.27+
 
 ### SQL injection via string concat
 ```
@@ -61,7 +61,7 @@ grep -rn 'if err != nil { return nil }\|if err != nil { return true }' --include
 
 ---
 
-## Rust 1.94+
+## Rust 1.98+
 
 ### Unsafe blocks
 ```

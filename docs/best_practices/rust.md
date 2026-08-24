@@ -801,14 +801,14 @@ for chunk in cve_ids.chunks(CHUNK_SIZE) {
 
 - Use `cargo-chef` for 3-stage Docker builds: planner → builder → runtime
 - Cache dependency compilation separately from source compilation (planner + recipe.json)
-- Use `debian:bookworm-slim` for runtime — avoid `alpine` with glibc Rust binaries
+- Match the runtime image's glibc to the builder's — a `trixie` builder needs a `trixie`/`debian13` runtime, and `alpine` (musl) never matches a glibc Rust binary
 - Set `HEALTHCHECK` and `EXPOSE` in the Dockerfile
 - Run as non-root user in production
 
 ```dockerfile
 # ✅ 3-stage cargo-chef build
 # Stage 1: Chef + planner
-FROM rust:1.94.0-bookworm AS chef
+FROM rust:1.98.0-trixie AS chef
 RUN cargo install cargo-chef --locked
 WORKDIR /app
 
@@ -825,7 +825,7 @@ COPY . .
 RUN cargo build --release
 
 # Stage 3: Minimal runtime
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/my-service /usr/local/bin/my-service
 EXPOSE 9000
