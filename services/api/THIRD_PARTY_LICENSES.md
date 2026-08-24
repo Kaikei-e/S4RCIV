@@ -33,8 +33,8 @@ in a GPL/AGPL application.
 
 | Component | Version | License | Use |
 |---|---|---|---|
-| `golang.org/x/net` (`/html`) | v0.30.0 | **BSD-3-Clause** (© The Go Authors) | HTML table parsing of the 両院公式議員名簿 (giin-roster gateway). |
-| `golang.org/x/text` (`/encoding/japanese`) | v0.32.0 | **BSD-3-Clause** (© The Go Authors) | Shift_JIS → UTF-8 decoding of the roster pages. |
+| `golang.org/x/net` (`/html`) | v0.58.0 | **BSD-3-Clause** (© The Go Authors) | HTML table parsing of the 両院公式議員名簿 (giin-roster gateway). |
+| `golang.org/x/text` (`/encoding/japanese`) | v0.41.0 | **BSD-3-Clause** (© The Go Authors) | Shift_JIS → UTF-8 decoding of the roster pages. |
 
 ## AGPL-3.0 compatibility conclusion
 

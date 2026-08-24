@@ -1,7 +1,7 @@
 # S4rCiv test suite — single reproducible entrypoint.
 #
 # A third party needs only Docker (+ Node for the browser E2E). The host toolchain
-# is deliberately NOT relied on: Go 1.26, protoc and Atlas all run inside containers,
+# is deliberately NOT relied on: Go 1.27, protoc and Atlas all run inside containers,
 # so `git clone && make test` reproduces the full suite without a bespoke setup.
 #
 # Layers (test pyramid, bottom-heavy):
