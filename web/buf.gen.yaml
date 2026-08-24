@@ -13,7 +13,7 @@
 version: v2
 clean: true
 plugins:
-  - remote: buf.build/bufbuild/es:v2.2.2
+  - remote: buf.build/bufbuild/es:v2.14.0
     out: src/lib/gen
     opt:
       - target=ts
