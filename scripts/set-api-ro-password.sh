@@ -7,7 +7,7 @@
 #
 # To (re)generate the secret first:
 #   openssl rand -base64 32 > secrets/api_db_password.txt
-#   docker run --rm -v "$PWD/secrets:/s" postgres:18.4-trixie \
+#   docker run --rm -v "$PWD/secrets:/s" postgres:18.6-trixie \
 #     sh -c 'chown 65532:65532 /s/api_db_password.txt && chmod 600 /s/api_db_password.txt'
 #
 # The SQL travels over psql stdin (not argv), so the password never appears in
@@ -26,7 +26,7 @@ SECRET_FILE="secrets/api_db_password.txt"
 # The secret is owned by uid 65532 (the api container user) with mode 600, so
 # read it through a root-in-namespace container instead of the host user.
 PW="$(docker run --rm -v "$PWD/secrets:/s:ro" \
-  postgres:18.4-trixie@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a \
+  postgres:18.6-trixie@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941 \
   sh -c "tr -d '\n' < /s/$(basename "$SECRET_FILE")")"
 if [ -z "$PW" ]; then
   echo "error: $SECRET_FILE is missing or empty" >&2
