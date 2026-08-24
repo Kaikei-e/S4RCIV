@@ -7,6 +7,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { PrefectureTally } from '$lib/types';
 	import { VOTE_COLORS, MAP_BASE } from '$lib/voteColors';
+	import { loadMapLibre } from '$lib/maplibre';
 
 	let { prefectures = [] }: { prefectures?: PrefectureTally[] } = $props();
 
@@ -64,8 +65,7 @@
 			}
 		}
 
-		const maplibregl = (await import('maplibre-gl')).default;
-		await import('maplibre-gl/dist/maplibre-gl.css');
+		const maplibregl = await loadMapLibre();
 
 		map = new maplibregl.Map({
 			container: el,

@@ -74,25 +74,6 @@ const (
 	QueryServiceListCheckpointsProcedure = "/s4rciv.query.v1.QueryService/ListCheckpoints"
 )
 
-// These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
-var (
-	queryServiceServiceDescriptor                     = v1.File_s4rciv_query_v1_query_proto.Services().ByName("QueryService")
-	queryServiceGetMeetingMethodDescriptor            = queryServiceServiceDescriptor.Methods().ByName("GetMeeting")
-	queryServiceListMeetingsMethodDescriptor          = queryServiceServiceDescriptor.Methods().ByName("ListMeetings")
-	queryServiceGetVoteEventMethodDescriptor          = queryServiceServiceDescriptor.Methods().ByName("GetVoteEvent")
-	queryServiceListVoteEventsMethodDescriptor        = queryServiceServiceDescriptor.Methods().ByName("ListVoteEvents")
-	queryServiceGetLawMethodDescriptor                = queryServiceServiceDescriptor.Methods().ByName("GetLaw")
-	queryServiceListLawsMethodDescriptor              = queryServiceServiceDescriptor.Methods().ByName("ListLaws")
-	queryServiceGetLawChangesMethodDescriptor         = queryServiceServiceDescriptor.Methods().ByName("GetLawChanges")
-	queryServiceListTimelineMethodDescriptor          = queryServiceServiceDescriptor.Methods().ByName("ListTimeline")
-	queryServiceListSangiinVoteEventsMethodDescriptor = queryServiceServiceDescriptor.Methods().ByName("ListSangiinVoteEvents")
-	queryServiceGetSangiinVoteMapMethodDescriptor     = queryServiceServiceDescriptor.Methods().ByName("GetSangiinVoteMap")
-	queryServiceListLegislatorVotesMethodDescriptor   = queryServiceServiceDescriptor.Methods().ByName("ListLegislatorVotes")
-	queryServiceGetStreamVerificationMethodDescriptor = queryServiceServiceDescriptor.Methods().ByName("GetStreamVerification")
-	queryServiceGetMastheadStatusMethodDescriptor     = queryServiceServiceDescriptor.Methods().ByName("GetMastheadStatus")
-	queryServiceListCheckpointsMethodDescriptor       = queryServiceServiceDescriptor.Methods().ByName("ListCheckpoints")
-)
-
 // QueryServiceClient is a client for the s4rciv.query.v1.QueryService service.
 type QueryServiceClient interface {
 	GetMeeting(context.Context, *connect.Request[v1.GetMeetingRequest]) (*connect.Response[v1.GetMeetingResponse], error)
@@ -160,89 +141,90 @@ type QueryServiceClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewQueryServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) QueryServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	queryServiceMethods := v1.File_s4rciv_query_v1_query_proto.Services().ByName("QueryService").Methods()
 	return &queryServiceClient{
 		getMeeting: connect.NewClient[v1.GetMeetingRequest, v1.GetMeetingResponse](
 			httpClient,
 			baseURL+QueryServiceGetMeetingProcedure,
-			connect.WithSchema(queryServiceGetMeetingMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("GetMeeting")),
 			connect.WithClientOptions(opts...),
 		),
 		listMeetings: connect.NewClient[v1.ListMeetingsRequest, v1.ListMeetingsResponse](
 			httpClient,
 			baseURL+QueryServiceListMeetingsProcedure,
-			connect.WithSchema(queryServiceListMeetingsMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("ListMeetings")),
 			connect.WithClientOptions(opts...),
 		),
 		getVoteEvent: connect.NewClient[v1.GetVoteEventRequest, v1.GetVoteEventResponse](
 			httpClient,
 			baseURL+QueryServiceGetVoteEventProcedure,
-			connect.WithSchema(queryServiceGetVoteEventMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("GetVoteEvent")),
 			connect.WithClientOptions(opts...),
 		),
 		listVoteEvents: connect.NewClient[v1.ListVoteEventsRequest, v1.ListVoteEventsResponse](
 			httpClient,
 			baseURL+QueryServiceListVoteEventsProcedure,
-			connect.WithSchema(queryServiceListVoteEventsMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("ListVoteEvents")),
 			connect.WithClientOptions(opts...),
 		),
 		getLaw: connect.NewClient[v1.GetLawRequest, v1.GetLawResponse](
 			httpClient,
 			baseURL+QueryServiceGetLawProcedure,
-			connect.WithSchema(queryServiceGetLawMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("GetLaw")),
 			connect.WithClientOptions(opts...),
 		),
 		listLaws: connect.NewClient[v1.ListLawsRequest, v1.ListLawsResponse](
 			httpClient,
 			baseURL+QueryServiceListLawsProcedure,
-			connect.WithSchema(queryServiceListLawsMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("ListLaws")),
 			connect.WithClientOptions(opts...),
 		),
 		getLawChanges: connect.NewClient[v1.GetLawChangesRequest, v1.GetLawChangesResponse](
 			httpClient,
 			baseURL+QueryServiceGetLawChangesProcedure,
-			connect.WithSchema(queryServiceGetLawChangesMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("GetLawChanges")),
 			connect.WithClientOptions(opts...),
 		),
 		listTimeline: connect.NewClient[v1.ListTimelineRequest, v1.ListTimelineResponse](
 			httpClient,
 			baseURL+QueryServiceListTimelineProcedure,
-			connect.WithSchema(queryServiceListTimelineMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("ListTimeline")),
 			connect.WithClientOptions(opts...),
 		),
 		listSangiinVoteEvents: connect.NewClient[v1.ListSangiinVoteEventsRequest, v1.ListSangiinVoteEventsResponse](
 			httpClient,
 			baseURL+QueryServiceListSangiinVoteEventsProcedure,
-			connect.WithSchema(queryServiceListSangiinVoteEventsMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("ListSangiinVoteEvents")),
 			connect.WithClientOptions(opts...),
 		),
 		getSangiinVoteMap: connect.NewClient[v1.GetSangiinVoteMapRequest, v1.GetSangiinVoteMapResponse](
 			httpClient,
 			baseURL+QueryServiceGetSangiinVoteMapProcedure,
-			connect.WithSchema(queryServiceGetSangiinVoteMapMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("GetSangiinVoteMap")),
 			connect.WithClientOptions(opts...),
 		),
 		listLegislatorVotes: connect.NewClient[v1.ListLegislatorVotesRequest, v1.ListLegislatorVotesResponse](
 			httpClient,
 			baseURL+QueryServiceListLegislatorVotesProcedure,
-			connect.WithSchema(queryServiceListLegislatorVotesMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("ListLegislatorVotes")),
 			connect.WithClientOptions(opts...),
 		),
 		getStreamVerification: connect.NewClient[v1.GetStreamVerificationRequest, v1.GetStreamVerificationResponse](
 			httpClient,
 			baseURL+QueryServiceGetStreamVerificationProcedure,
-			connect.WithSchema(queryServiceGetStreamVerificationMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("GetStreamVerification")),
 			connect.WithClientOptions(opts...),
 		),
 		getMastheadStatus: connect.NewClient[v1.GetMastheadStatusRequest, v1.GetMastheadStatusResponse](
 			httpClient,
 			baseURL+QueryServiceGetMastheadStatusProcedure,
-			connect.WithSchema(queryServiceGetMastheadStatusMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("GetMastheadStatus")),
 			connect.WithClientOptions(opts...),
 		),
 		listCheckpoints: connect.NewClient[v1.ListCheckpointsRequest, v1.ListCheckpointsResponse](
 			httpClient,
 			baseURL+QueryServiceListCheckpointsProcedure,
-			connect.WithSchema(queryServiceListCheckpointsMethodDescriptor),
+			connect.WithSchema(queryServiceMethods.ByName("ListCheckpoints")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -400,88 +382,89 @@ type QueryServiceHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewQueryServiceHandler(svc QueryServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	queryServiceMethods := v1.File_s4rciv_query_v1_query_proto.Services().ByName("QueryService").Methods()
 	queryServiceGetMeetingHandler := connect.NewUnaryHandler(
 		QueryServiceGetMeetingProcedure,
 		svc.GetMeeting,
-		connect.WithSchema(queryServiceGetMeetingMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("GetMeeting")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceListMeetingsHandler := connect.NewUnaryHandler(
 		QueryServiceListMeetingsProcedure,
 		svc.ListMeetings,
-		connect.WithSchema(queryServiceListMeetingsMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("ListMeetings")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceGetVoteEventHandler := connect.NewUnaryHandler(
 		QueryServiceGetVoteEventProcedure,
 		svc.GetVoteEvent,
-		connect.WithSchema(queryServiceGetVoteEventMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("GetVoteEvent")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceListVoteEventsHandler := connect.NewUnaryHandler(
 		QueryServiceListVoteEventsProcedure,
 		svc.ListVoteEvents,
-		connect.WithSchema(queryServiceListVoteEventsMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("ListVoteEvents")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceGetLawHandler := connect.NewUnaryHandler(
 		QueryServiceGetLawProcedure,
 		svc.GetLaw,
-		connect.WithSchema(queryServiceGetLawMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("GetLaw")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceListLawsHandler := connect.NewUnaryHandler(
 		QueryServiceListLawsProcedure,
 		svc.ListLaws,
-		connect.WithSchema(queryServiceListLawsMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("ListLaws")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceGetLawChangesHandler := connect.NewUnaryHandler(
 		QueryServiceGetLawChangesProcedure,
 		svc.GetLawChanges,
-		connect.WithSchema(queryServiceGetLawChangesMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("GetLawChanges")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceListTimelineHandler := connect.NewUnaryHandler(
 		QueryServiceListTimelineProcedure,
 		svc.ListTimeline,
-		connect.WithSchema(queryServiceListTimelineMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("ListTimeline")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceListSangiinVoteEventsHandler := connect.NewUnaryHandler(
 		QueryServiceListSangiinVoteEventsProcedure,
 		svc.ListSangiinVoteEvents,
-		connect.WithSchema(queryServiceListSangiinVoteEventsMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("ListSangiinVoteEvents")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceGetSangiinVoteMapHandler := connect.NewUnaryHandler(
 		QueryServiceGetSangiinVoteMapProcedure,
 		svc.GetSangiinVoteMap,
-		connect.WithSchema(queryServiceGetSangiinVoteMapMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("GetSangiinVoteMap")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceListLegislatorVotesHandler := connect.NewUnaryHandler(
 		QueryServiceListLegislatorVotesProcedure,
 		svc.ListLegislatorVotes,
-		connect.WithSchema(queryServiceListLegislatorVotesMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("ListLegislatorVotes")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceGetStreamVerificationHandler := connect.NewUnaryHandler(
 		QueryServiceGetStreamVerificationProcedure,
 		svc.GetStreamVerification,
-		connect.WithSchema(queryServiceGetStreamVerificationMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("GetStreamVerification")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceGetMastheadStatusHandler := connect.NewUnaryHandler(
 		QueryServiceGetMastheadStatusProcedure,
 		svc.GetMastheadStatus,
-		connect.WithSchema(queryServiceGetMastheadStatusMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("GetMastheadStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
 	queryServiceListCheckpointsHandler := connect.NewUnaryHandler(
 		QueryServiceListCheckpointsProcedure,
 		svc.ListCheckpoints,
-		connect.WithSchema(queryServiceListCheckpointsMethodDescriptor),
+		connect.WithSchema(queryServiceMethods.ByName("ListCheckpoints")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/s4rciv.query.v1.QueryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

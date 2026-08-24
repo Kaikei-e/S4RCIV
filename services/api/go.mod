@@ -1,6 +1,6 @@
 module s4rciv.org/api
 
-go 1.26
+go 1.27
 
 require (
 	connectrpc.com/connect v1.20.0
@@ -11,10 +11,10 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/temoto/robotstxt v1.1.2
 	github.com/ucarion/c14n v0.1.0
-	golang.org/x/mod v0.38.0
-	golang.org/x/net v0.57.0
-	golang.org/x/text v0.40.0
-	google.golang.org/protobuf v1.36.11
+	golang.org/x/mod v0.40.0
+	golang.org/x/net v0.58.0
+	golang.org/x/text v0.41.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (

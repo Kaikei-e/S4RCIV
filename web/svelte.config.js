@@ -12,9 +12,10 @@ const config = {
 		// same-origin: the map style is inline and its GeoJSON basemap is served from
 		// /geo, so no remote script/style/tile/connect origins are needed. 'auto' mode
 		// lets SvelteKit nonce/hash its own inline bootstrap under script-src 'self'.
-		// maplibre-gl needs blob: workers and injects inline element styles, hence
-		// worker/child blob: and style-src 'unsafe-inline'. frame-ancestors 'none'
-		// blocks clickjacking.
+		// maplibre-gl v6 self-hosts its worker (see $lib/maplibre) — the URL is
+		// same-origin, so it is constructed directly and worker-src 'self' suffices
+		// (v5 needed blob:). It still injects inline element styles, hence style-src
+		// 'unsafe-inline'. frame-ancestors 'none' blocks clickjacking.
 		csp: {
 			mode: 'auto',
 			directives: {
@@ -24,8 +25,8 @@ const config = {
 				'img-src': ['self', 'data:', 'blob:'],
 				'font-src': ['self'],
 				'connect-src': ['self'],
-				'worker-src': ['self', 'blob:'],
-				'child-src': ['self', 'blob:'],
+				'worker-src': ['self'],
+				'child-src': ['self'],
 				'frame-ancestors': ['none'],
 				'base-uri': ['self'],
 				'form-action': ['self'],

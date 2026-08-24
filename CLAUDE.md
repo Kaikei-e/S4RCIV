@@ -28,7 +28,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Test suite (run from repo root; ADR-000016)
 
-The host toolchain (Go 1.26, protoc, Atlas) is **not** relied on — every DB-touching layer runs in containers against the real Postgres from `compose.yaml`, so `git clone && make test` reproduces the whole suite with only Docker (+ Node for browser E2E). `make help` lists targets.
+The host toolchain (Go 1.27, protoc, Atlas) is **not** relied on — every DB-touching layer runs in containers against the real Postgres from `compose.yaml`, so `git clone && make test` reproduces the whole suite with only Docker (+ Node for browser E2E). `make help` lists targets.
 
 - `make unit` — Go + Rust + web (Vitest) unit tests, hermetic.
 - `make cdc` — contract checks: `scripts/check-proto-drift.sh` (api vs differ `diff.proto` byte-equality) + `buf breaking` vs the base ref. No Pact (shared buf-generated `.proto` makes it redundant).

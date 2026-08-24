@@ -38,12 +38,6 @@ const (
 	DiffServiceComputeChangeProcedure = "/s4rciv.diff.v1.DiffService/ComputeChange"
 )
 
-// These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
-var (
-	diffServiceServiceDescriptor             = v1.File_s4rciv_diff_v1_diff_proto.Services().ByName("DiffService")
-	diffServiceComputeChangeMethodDescriptor = diffServiceServiceDescriptor.Methods().ByName("ComputeChange")
-)
-
 // DiffServiceClient is a client for the s4rciv.diff.v1.DiffService service.
 type DiffServiceClient interface {
 	ComputeChange(context.Context, *connect.Request[v1.ComputeChangeRequest]) (*connect.Response[v1.ComputeChangeResponse], error)
@@ -58,11 +52,12 @@ type DiffServiceClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewDiffServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DiffServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	diffServiceMethods := v1.File_s4rciv_diff_v1_diff_proto.Services().ByName("DiffService").Methods()
 	return &diffServiceClient{
 		computeChange: connect.NewClient[v1.ComputeChangeRequest, v1.ComputeChangeResponse](
 			httpClient,
 			baseURL+DiffServiceComputeChangeProcedure,
-			connect.WithSchema(diffServiceComputeChangeMethodDescriptor),
+			connect.WithSchema(diffServiceMethods.ByName("ComputeChange")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -89,10 +84,11 @@ type DiffServiceHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewDiffServiceHandler(svc DiffServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	diffServiceMethods := v1.File_s4rciv_diff_v1_diff_proto.Services().ByName("DiffService").Methods()
 	diffServiceComputeChangeHandler := connect.NewUnaryHandler(
 		DiffServiceComputeChangeProcedure,
 		svc.ComputeChange,
-		connect.WithSchema(diffServiceComputeChangeMethodDescriptor),
+		connect.WithSchema(diffServiceMethods.ByName("ComputeChange")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/s4rciv.diff.v1.DiffService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

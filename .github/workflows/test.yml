@@ -1,5 +1,5 @@
 # Reproducible test suite (ADR-000016). CI runs the SAME `make` targets a third
-# party runs locally — the host toolchain (Go 1.26, protoc, Atlas) lives in
+# party runs locally — the host toolchain (Go 1.27, protoc, Atlas) lives in
 # containers, so a clean ubuntu runner with Docker reproduces every layer.
 name: test
 
@@ -18,10 +18,10 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Provision DB secret (compose mounts ./secrets/db_password.txt)
         run: mkdir -p secrets && echo "ci-only-not-a-real-secret" > secrets/db_password.txt
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - run: make unit-go
       - run: make unit-rust
       - run: make unit-web
@@ -32,10 +32,10 @@ jobs:
   cdc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # buf breaking needs history to resolve the baseline ref
-      - uses: bufbuild/buf-action@fd21066df7214747548607aaa45548ba2b9bc1ff # v1.4.0
+      - uses: bufbuild/buf-action@8c6a16e16f12ba20b6470afa9c2ba9b5ba8c97c3 # v1.5.0
         with:
           setup_only: true
       - run: make proto-drift
@@ -48,10 +48,10 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Provision DB secret
         run: mkdir -p secrets && echo "ci-only-not-a-real-secret" > secrets/db_password.txt
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - run: make integration
       - if: always()
         run: make down
@@ -60,16 +60,16 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Provision DB secret
         run: mkdir -p secrets && echo "ci-only-not-a-real-secret" > secrets/db_password.txt
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 25
+          node-version: 26
       - name: Install pnpm
         # Node 25+ no longer ships Corepack; match web/package.json packageManager.
-        run: npm install -g pnpm@11.15.1
+        run: npm install -g pnpm@11.23.0
       - name: Install web deps + Playwright browser
         working-directory: web
         run: |

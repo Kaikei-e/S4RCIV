@@ -511,7 +511,7 @@ rows, err := pool.Query(ctx, fmt.Sprintf("SELECT * FROM projects WHERE id = '%s'
 
 ```dockerfile
 # Build stage
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -519,7 +519,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /bin/service ./main.go
 
 # Runtime stage
-FROM gcr.io/distroless/static-debian12
+FROM gcr.io/distroless/static-debian13
 COPY --from=build /bin/service /service
 EXPOSE 8400
 ENTRYPOINT ["/service"]

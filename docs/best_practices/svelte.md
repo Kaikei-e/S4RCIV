@@ -1014,15 +1014,15 @@ const apiKey = env.NVD_API_KEY;
 
 ### Multi-Stage pnpm Build
 
-- Use `corepack` to install pnpm — do not install globally with npm
+- Node 25+ images no longer ship Corepack; install the exact `packageManager` pin with `npm install -g pnpm@<version>`
 - Use `--frozen-lockfile` for reproducible builds
 - Prune dev dependencies after build with `pnpm prune --prod`
 - Run as a non-root user in the runtime stage
 
 ```dockerfile
 # ✅ Multi-stage pnpm + adapter-node build
-FROM node:20-alpine AS build
-RUN corepack enable && corepack prepare pnpm@latest --activate
+FROM node:26-alpine AS build
+RUN npm install -g pnpm@11.23.0
 WORKDIR /app
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
@@ -1030,7 +1030,7 @@ COPY . .
 RUN pnpm run build
 RUN pnpm prune --prod
 
-FROM node:20-alpine
+FROM node:26-alpine
 RUN addgroup -S decree && adduser -S decree -G decree
 WORKDIR /app
 COPY --from=build --chown=decree:decree /app/build ./build
