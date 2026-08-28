@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Builder is Debian 13 (trixie) to match the glibc of the distroless runtime.
-FROM rust:1.98.0-trixie@sha256:7f7a53a25a0319dd8284e279d529d45759cb384d59b14cc6806132910f45522e AS build
+FROM rust:1.98.0-trixie@sha256:271849e998ffce5776454bbf98c5dc21baafc854ff8e566197908d3aca9a81e8 AS build
 # protoc is required by build.rs (prost-build invokes it to compile the proto).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends protobuf-compiler \
