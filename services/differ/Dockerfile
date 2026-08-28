@@ -19,7 +19,7 @@ FROM build AS test
 COPY tests ./tests
 CMD ["cargo", "test", "--all"]
 
-FROM gcr.io/distroless/cc-debian13:nonroot@sha256:a77defd6fedbb3392b175ba8ea3d1c22be963c1597c248c3ba987ddd80bfb512
+FROM gcr.io/distroless/cc-debian13:nonroot@sha256:c31ff9abcb1910f3ab25c7957bdaf0bfe12a01eb546e8df2282f1c8f682b606c
 COPY --from=build /differ /app/differ
 # The Connect-RPC server binds 0.0.0.0:$DIFFER_PORT (default 9090).
 EXPOSE 9090
