@@ -55,7 +55,7 @@ const client = createClient(
 );
 
 function json<Desc extends DescMessage>(schema: Desc, m: MessageShape<Desc>): unknown {
-	return toJson(schema, m, { emitDefaultValues: true });
+	return toJson(schema, m, { alwaysEmitImplicit: true });
 }
 
 export async function listTimeline(req: ListTimelineRequest): Promise<ListTimelineResponse> {
@@ -117,7 +117,7 @@ export async function getSangiinVoteMap(voteEventId: string): Promise<GetSangiin
 }
 
 // 完全性検証 read surface (ADR-000014): one Stream's events + covering checkpoint,
-// for the in-browser verifier. emitDefaultValues keeps the zero/empty HashableEvent
+// for the in-browser verifier. alwaysEmitImplicit keeps the zero/empty HashableEvent
 // fields present in the JSON so the verifier re-marshals the exact canonical form.
 export async function getStreamVerification(streamId: string): Promise<StreamVerificationJson> {
 	return json(
