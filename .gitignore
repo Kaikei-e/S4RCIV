@@ -36,3 +36,8 @@ web/.pnpm-store/
 # Local DB dumps (scripts/backup-db.sh) — the ground truth lives in Postgres;
 # dumps are an operator-local recovery artifact, never repo content.
 /backups/
+
+# Personal MCP client settings (machine-local absolute paths)
+/.mcp.json
+/.codex/
+/.claude/settings.local.json
