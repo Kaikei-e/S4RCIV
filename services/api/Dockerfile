@@ -17,7 +17,7 @@ ENV CGO_ENABLED=1 MIGRATIONS_DIR=/migrations
 CMD ["go", "test", "./..."]
 
 # Query side (read-only Connect-RPC server).
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3 AS api
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:d62067879de890a1def9da0e7766b7d20810a5e5555cef8506b752437d7a3e88 AS api
 WORKDIR /app
 COPY --from=build /out/api /app/api
 EXPOSE 8080
@@ -25,7 +25,7 @@ USER nonroot:nonroot
 ENTRYPOINT ["/app/api"]
 
 # Command side (collector: discover / poll / project).
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3 AS collector
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:d62067879de890a1def9da0e7766b7d20810a5e5555cef8506b752437d7a3e88 AS collector
 WORKDIR /app
 COPY --from=build /out/collector /app/collector
 USER nonroot:nonroot
