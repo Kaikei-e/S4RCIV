@@ -3,7 +3,7 @@ module s4rciv.org/api
 go 1.27.1
 
 require (
-	connectrpc.com/connect v1.21.0
+	connectrpc.com/connect v1.21.1
 	github.com/google/uuid v1.6.0
 	github.com/gowebpki/jcs v1.0.2
 	github.com/ikawaha/kagome-dict/ipa v1.2.6
