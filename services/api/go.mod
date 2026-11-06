@@ -8,7 +8,7 @@ require (
 	github.com/gowebpki/jcs v1.0.2
 	github.com/ikawaha/kagome-dict/ipa v1.2.6
 	github.com/ikawaha/kagome/v2 v2.11.0
-	github.com/jackc/pgx/v5 v5.11.0
+	github.com/jackc/pgx/v5 v5.12.0
 	github.com/temoto/robotstxt v1.1.2
 	github.com/ucarion/c14n v0.1.0
 	golang.org/x/mod v0.41.0
@@ -21,6 +21,6 @@ require (
 	github.com/ikawaha/kagome-dict v1.1.7 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/jackc/puddle/v2 v2.2.3 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 )
