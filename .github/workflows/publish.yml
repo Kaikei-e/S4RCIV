@@ -32,6 +32,8 @@ jobs:
             context: web
             target: ""
     steps:
+      - name: Lowercase image owner (image repository names must be lowercase)
+        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -45,6 +47,6 @@ jobs:
           target: ${{ matrix.target }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/s4rciv-${{ matrix.image }}:${{ github.sha }}
+            ghcr.io/${{ env.OWNER }}/s4rciv-${{ matrix.image }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
